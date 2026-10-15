@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dungeons-desktops"
+version = "0.1.0"
+description = "Procedural desktop dungeon-defense game. Current slice: creature rig, IK, ragdoll, and a desktop-pet overlay."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.7,<7",
+    "pyobjc-framework-Quartz>=10; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
