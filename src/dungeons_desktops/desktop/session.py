@@ -58,7 +58,6 @@ LIZARDS = 2
 DRAKE_PACK = 3
 """How many of the drake `COLOURS` ride in, picked at random, no two alike."""
 DEFENDERS = (
-    "elementals",
     "chimera",
     "drow",
     "drakes",
@@ -72,6 +71,8 @@ DEFENDERS = (
     "goblins",
     "dragon",
 )
+SUPPORTED_DEFENDERS = ("elementals", "ooze", *DEFENDERS)
+"""Every menu option; the normal rotation deliberately omits elementals and the ooze."""
 EDGE_TOUCH = 1.0
 SIDE_LANE = 18.0
 BOTTOM_LANE = stick_figure.MOVES.max_jump - 1.0
@@ -124,7 +125,7 @@ class DesktopSession(SimWorld):
         goblin_squad: int = GOBLIN_SQUAD,
     ) -> None:
         """`screen` is the whole display; `usable` the part outside the menu bar and Dock.
-        `defenders` is the rotation ("elementals", "chimera", "drow", "drakes", "hydra",
+        `defenders` is the rotation ("chimera", "drow", "drakes", "hydra",
         "mimic", "lich", "minotaur", "displacer", "mindflayer", "worm", "goblins",
         "dragon"), starting with the first."""
         self.screen = screen
@@ -168,6 +169,7 @@ class DesktopSession(SimWorld):
             *self.mindflayers,
             *self.displacers,
             *self.minotaurs,
+            *self.oozes,
             *self.chimeras,
             *self.elementals,
             *self.liches,
@@ -190,6 +192,24 @@ class DesktopSession(SimWorld):
         left = sum(m.hp for m in self.live_monsters) + riders
         return min(1.0, left / self.defender_max_hp)
 
+    @property
+    def hero_health(self) -> float | None:
+        """The first living hero's health, retained for existing callers."""
+        bars = self.hero_health_bars
+        return bars[0][1] if bars else None
+
+    @property
+    def hero_health_bars(self) -> list[tuple[str, float]]:
+        """Display name and health fraction for every living hero in play."""
+        return [
+            (
+                getattr(hero, "display_name", hero.variant.replace("_", " ").title()),
+                hero.hp / hero.max_hp,
+            )
+            for hero in self.heroes
+            if hero in self.stickmen and hero.animated
+        ]
+
     def rotate(self) -> None:
         """The current defender leaves (any of it still alive vanishes, devourers and
         thralls too) and the next one in the rotation takes over."""
@@ -198,6 +218,41 @@ class DesktopSession(SimWorld):
         self._dismiss()
         self._next_defender()
 
+    def set_defenders(self, defenders: Sequence[str]) -> None:
+        """Replace the enabled rotation and immediately leave a disabled defender.
+
+        The supplied order becomes the rotation order. If the current defender remains
+        enabled, it stays in place; otherwise the next enabled defender in the full roster
+        takes over. An empty sequence dismisses the current defender.
+        """
+        selected = tuple(dict.fromkeys(defenders))
+        unknown = set(selected) - set(SUPPORTED_DEFENDERS)
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(f"Unknown defender type: {names}")
+        if selected == self.defenders:
+            return
+
+        current = self.defender
+        if current in selected:
+            self.defenders = selected
+            self.defender_index = selected.index(current)
+            return
+
+        self._dismiss()
+        self.defenders = selected
+        self.defender_max_hp = 0
+        if not selected:
+            self.defender_index = 0
+            return
+
+        roster = SUPPORTED_DEFENDERS
+        start = roster.index(current) if current in roster else -1
+        following = (*roster[start + 1 :], *roster[: start + 1])
+        next_defender = next(kind for kind in following if kind in selected)
+        self.defender_index = selected.index(next_defender)
+        self._summon(next_defender)
+
     def _next_defender(self) -> None:
         self.defender_index = (self.defender_index + 1) % len(self.defenders)
         self._summon(self.defender)
@@ -205,6 +260,8 @@ class DesktopSession(SimWorld):
     def _dismiss(self) -> None:
         """Poof the live monsters and free any thralls; the dead ones in `fallen` are
         left to fade."""
+        for ooze in self.oozes:
+            ooze.release_captives()
         for worm in self.worms:
             self.debris.burst(worm.head, Vec2(0.0, -1.0), 16, 220.0, spread=1.4, puffs=6)
         for goblin_ in self.goblins:
@@ -219,6 +276,7 @@ class DesktopSession(SimWorld):
             *self.devourers,
             *self.displacers,
             *self.minotaurs,
+            *self.oozes,
             *self.chimeras,
             *self.elementals,
             *self.liches,
@@ -240,6 +298,7 @@ class DesktopSession(SimWorld):
         self.devourers.clear()
         self.displacers.clear()
         self.minotaurs.clear()
+        self.oozes.clear()
         self.chimeras.clear()
         self.elementals.clear()
         self.liches.clear()
@@ -256,6 +315,9 @@ class DesktopSession(SimWorld):
         if kind == "elementals":
             elemental = self.add_elemental(self._goblin_muster(1)[0])
             self._poof(elemental.center())
+        elif kind == "ooze":
+            ooze = self.add_ooze(self._goblin_muster(1)[0])
+            self._poof(ooze.center())
         elif kind == "chimera":
             chimera = self.add_chimera(self._goblin_muster(1)[0])
             self._poof(chimera.center())
@@ -365,16 +427,16 @@ class DesktopSession(SimWorld):
             if len(self.stickmen) < self.max_stickmen:
                 self.spawn_at_edge()
 
-    def spawn_at_edge(self, edge: str | None = None) -> Stickman:
+    def spawn_at_edge(
+        self, edge: str | None = None, variant: str | None = None
+    ) -> Stickman:
         random = self.random
         edge = edge or random.choice(EDGES)
-        variant = random.choice(list(stick_figure.CLASSES))
+        variant = variant or random.choice(list(stick_figure.CLASSES))
         if edge != "top":
             anchor = self._side_anchor(edge)
             if anchor is not None:
-                stickman = Stickman(self, anchor, variant, wander=True)
-                self.stickmen.append(stickman)
-                return stickman
+                return self._add_stickman(anchor, variant, wander=True)
         return self._fall_in(variant)
 
     def _side_anchor(self, edge: str) -> Anchor | None:
@@ -404,7 +466,6 @@ class DesktopSession(SimWorld):
     def _fall_in(self, variant: str) -> Stickman:
         x = self.random.uniform(self.left + 20.0, self.width - 20.0)
         landing = surface_below(self.planner, Vec2(x, self.usable.top))
-        stickman = Stickman(self, landing, variant, wander=True)
-        self.stickmen.append(stickman)
+        stickman = self._add_stickman(landing, variant, wander=True)
         stickman.fall_in(Vec2(landing.point.x, self.screen.top))
         return stickman

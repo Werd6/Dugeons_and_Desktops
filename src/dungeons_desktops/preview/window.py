@@ -19,6 +19,7 @@ from dungeons_desktops.render.draw import (
     GROUND,
     draw_actors,
     draw_debris,
+    draw_dio_effects,
     draw_displacers,
     draw_dragon,
     draw_fallen,
@@ -43,6 +44,7 @@ from dungeons_desktops.render.hydra import draw_hydras
 from dungeons_desktops.render.lich import draw_liches
 from dungeons_desktops.render.mimic import draw_mimics
 from dungeons_desktops.render.necromancy import draw_necromancy, draw_scorches
+from dungeons_desktops.render.ooze import draw_oozes
 
 BOX_FILL = QColor(44, 48, 60)
 BOX_TITLE = QColor(58, 63, 78)
@@ -64,9 +66,10 @@ HELP = (
     "click empty space: go there    drag a box: move a 'window'    click the figure: knock over    "
     "drag a goblin: move it\n"
     "selected (green marker), Tab to switch:  W wander  S stop  R ragdoll  Space get up  "
-    "1-8 barbarian/wizard/rogue/paladin/ranger/cleric/alchemist/druid  F attack\n"
+    "1-9 barbarian/wizard/rogue/paladin/ranger/cleric/alchemist/druid/sorcerer  "
+    "0 fighter  Y Dio  F attack\n"
     "N add adventurer  G add goblin  M add worm  B add dragon  V dragon colour  I add mind flayer  "
-    "P add displacer beast  T add minotaur  L add lich  C add mimic  H add hydra  "
+    "P add displacer beast  T add minotaur  U add ooze  L add lich  C add mimic  H add hydra  "
     "K add kobold drake  Z add drow lizard rider  X add chimera  E add elemental  "
     "J shift elemental  D surfaces"
 )
@@ -138,6 +141,7 @@ class RigCanvas(QWidget):
         draw_mimics(painter, controller.mimics)
         draw_skeletons(painter, controller.skeletons)
         draw_actors(painter, controller.goblins, controller.stickmen, controller.selected)
+        draw_oozes(painter, controller.oozes)
         draw_darkness(painter, controller.darkness, controller.stickmen)
         draw_lizards(painter, controller.lizards)
         draw_drow(painter, controller.drow)
@@ -145,6 +149,7 @@ class RigCanvas(QWidget):
             draw_dragon(painter, dragon)
         draw_mindflayers(painter, controller.mindflayers, controller.devourers)
         draw_displacers(painter, controller.displacers)
+        draw_dio_effects(painter, controller.heroes)
         draw_projectiles(painter, controller.projectiles)
         draw_spells(painter, controller.spells)
         draw_necromancy(painter, controller.necromancy)
@@ -205,12 +210,14 @@ class RigPreviewWindow(QWidget):
         buttons = QHBoxLayout()
         for label, action in (
             ("Add stickman", self.controller.spawn_stickman),
+            ("Add Dio", self.controller.spawn_dio),
             ("Add goblin", self.controller.spawn_goblin),
             ("Add worm", self.controller.spawn_worm),
             ("Add dragon", self.controller.spawn_dragon),
             ("Add mind flayer", self.controller.spawn_mindflayer),
             ("Add displacer beast", self.controller.spawn_displacer),
             ("Add minotaur", self.controller.spawn_minotaur),
+            ("Add ooze", self.controller.spawn_ooze),
             ("Add lich", self.controller.spawn_lich),
             ("Add mimic", self.controller.spawn_mimic),
             ("Add hydra", self.controller.spawn_hydra),
@@ -257,11 +264,14 @@ class RigPreviewWindow(QWidget):
             Qt.Key.Key_Space: self.controller.get_up,
             Qt.Key.Key_D: self._toggle_surfaces,
             **{
-                Qt.Key(Qt.Key.Key_1.value + i): (lambda c=name: self.controller.set_variant(c))
+                Qt.Key(Qt.Key.Key_0.value + (i + 1) % 10): (
+                    lambda c=name: self.controller.set_variant(c)
+                )
                 for i, name in enumerate(CLASSES)
             },
             Qt.Key.Key_F: self.controller.attack,
             Qt.Key.Key_N: self.controller.spawn_stickman,
+            Qt.Key.Key_Y: self.controller.spawn_dio,
             Qt.Key.Key_G: self.controller.spawn_goblin,
             Qt.Key.Key_M: self.controller.spawn_worm,
             Qt.Key.Key_B: self.controller.spawn_dragon,
@@ -269,6 +279,7 @@ class RigPreviewWindow(QWidget):
             Qt.Key.Key_I: self.controller.spawn_mindflayer,
             Qt.Key.Key_P: self.controller.spawn_displacer,
             Qt.Key.Key_T: self.controller.spawn_minotaur,
+            Qt.Key.Key_U: self.controller.spawn_ooze,
             Qt.Key.Key_L: self.controller.spawn_lich,
             Qt.Key.Key_C: self.controller.spawn_mimic,
             Qt.Key.Key_H: self.controller.spawn_hydra,

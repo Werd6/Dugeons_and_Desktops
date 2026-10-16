@@ -3,7 +3,6 @@ Chimera (classic greek)*
 Kraken? 
 Elementals*
 Beholder
-Balrog*
 Gorgon
 
 Drakes (kobold riders) x
@@ -20,23 +19,23 @@ Dragon
 
 Spend Skulls:
 Worm 
-Displacer beast
-Hydra
+
+
 
 
 Unlock by killing enough of the class type:
 Barbarian - Minotaur
 Wizard - Lich
 Rogue - Kobolds
-Paladin - (balrog)
+Paladin - (balrog (someday maybe))
 Ranger - Drow
 Cleric - (something else undead)
 Alchemist - (Ooze)
 Druid - Chimera
-Monk* - (Elementals)
-Sorcerer* - Mind flayer
+Monk - Displacer beast
+Sorcerer - Mind flayer
 Swashbuckler* - (Ocean themed one)
+Fighter - Hydra
 
 HEROS (Unlocked with skulls and then spawning super rarley)
-
-EPIC MONSTERS (Unlocked with Hero skulls)
+Dio "Soulforger" Orsius

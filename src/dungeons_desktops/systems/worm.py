@@ -354,8 +354,8 @@ class Worm(Mortal):
         for stickman in self.world.stickmen:
             if stickman.prey and stickman.hits(head, margin=CATCH_MARGIN * self.size):
                 fling = self.velocity.normalized() * CATCH_SPEED + Vec2(0.0, -120.0)
-                if not stickman.hurt(
-                    WORM_DAMAGE, head, fling, "worm", "Eaten by the worm!", bleed=False
+                if not stickman.hurt_from(
+                    self, WORM_DAMAGE, head, fling, "worm", "Eaten by the worm!", bleed=False
                 ):
                     continue
                 self._bite_off(stickman, fling)

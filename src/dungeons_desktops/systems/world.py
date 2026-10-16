@@ -49,6 +49,7 @@ from dungeons_desktops.systems.elementals import KINDS as ELEMENT_FORMS
 from dungeons_desktops.systems.elementals import Elemental
 from dungeons_desktops.systems.goblins import PACK, SPEAR_PUSH, Goblin, GoblinPack
 from dungeons_desktops.systems.gore import Gore
+from dungeons_desktops.systems.heroes import Dio
 from dungeons_desktops.systems.hydra import Hydra
 from dungeons_desktops.systems.kobolds import Kobold, Traps
 from dungeons_desktops.systems.lich import Lich
@@ -57,6 +58,8 @@ from dungeons_desktops.systems.mindflayer import MindFlayer
 from dungeons_desktops.systems.minotaur import Minotaur
 from dungeons_desktops.systems.mortal import ADVENTURER_DAMAGE
 from dungeons_desktops.systems.necromancy import Necromancy
+from dungeons_desktops.systems.ooze import MOVES as OOZE_MOVES
+from dungeons_desktops.systems.ooze import Ooze
 from dungeons_desktops.systems.projectiles import Projectiles
 from dungeons_desktops.systems.skeletons import CRUMBLE_AFTER, SKELETON_CAP, Skeleton, SkeletonPack
 from dungeons_desktops.systems.spears import Spears
@@ -110,6 +113,8 @@ class SimWorld:
         """Stickmen killed by any monster so far."""
         self.kill_marks: list[KillMark] = []
         self.stickmen: list[Stickman] = []
+        self.heroes: list[Dio] = []
+        """Named heroes also remain in `stickmen` for shared prey and combat handling."""
         self.goblins: list[Goblin] = []
         self.goblin_pack = GoblinPack(self)
         self.skeletons: list[Skeleton] = []
@@ -132,6 +137,7 @@ class SimWorld:
         self.darkness = Darkness(self)
         self.chimeras: list[Chimera] = []
         self.elementals: list[Elemental] = []
+        self.oozes: list[Ooze] = []
         self.fallen: list[
             Goblin
             | Chimera
@@ -144,6 +150,7 @@ class SimWorld:
             | Devourer
             | Displacer
             | Minotaur
+            | Ooze
             | Lich
             | Mimic
             | Hydra
@@ -190,7 +197,14 @@ class SimWorld:
         if point is None:
             point = Vec2(self.random.uniform(self.left, self.width), self.floor_y)
         anchor = self.planner.anchor_near(point, walk_only=True)
-        stickman = Stickman(self, anchor, variant, wander)
+        return self._add_stickman(anchor, variant, wander)
+
+    def _add_stickman(self, anchor: Anchor, variant: str, wander: bool) -> Stickman:
+        if variant == "hero_fighter":
+            stickman = Dio(self, anchor, wander)
+            self.heroes.append(stickman)
+        else:
+            stickman = Stickman(self, anchor, variant, wander)
         self.stickmen.append(stickman)
         return stickman
 
@@ -345,6 +359,17 @@ class SimWorld:
         minotaur = Minotaur(self, anchor, heading=self.random.choice((-1, 1)))
         self.minotaurs.append(minotaur)
         return minotaur
+
+    def add_ooze(self, point: Vec2 | None = None, facing: int | None = None) -> Ooze:
+        """Place an ooze on the nearest walkable surface."""
+        if point is None:
+            point = Vec2(self.random.uniform(self.left, self.width), self.floor_y)
+        anchor = self.ooze_planner.anchor_near(point, walk_only=True)
+        if facing is None:
+            facing = self.random.choice((-1, 1))
+        ooze = Ooze(self, anchor, facing)
+        self.oozes.append(ooze)
+        return ooze
 
     def add_chimera(self, point: Vec2 | None = None, facing: int | None = None) -> Chimera:
         """Prowls in at `point` (snapped to the nearest window top or the floor); by
@@ -524,6 +549,8 @@ class SimWorld:
             displacer.update(dt)
         for minotaur in self.minotaurs:
             minotaur.update(dt)
+        for ooze in self.oozes:
+            ooze.update(dt)
         for chimera in self.chimeras:
             chimera.update(dt)
         for elemental in self.elementals:
@@ -614,6 +641,7 @@ class SimWorld:
     def _despawn(self) -> None:
         if any(s.gone for s in self.stickmen):
             self.stickmen = [s for s in self.stickmen if not s.gone]
+        self.heroes = [hero for hero in self.heroes if hero in self.stickmen]
         if any(m.gone for m in self.fallen):
             self.fallen = [m for m in self.fallen if not m.gone]
 
@@ -680,6 +708,7 @@ class SimWorld:
             *self.devourers,
             *self.displacers,
             *self.minotaurs,
+            *self.oozes,
             *self.chimeras,
             *[e for e in self.elementals if e.visible],
             *[lich for lich in self.liches if not lich.phased],
@@ -718,6 +747,8 @@ class SimWorld:
         ):
             return monster.center()
         if isinstance(monster, Minotaur) and monster in self.minotaurs:
+            return monster.center()
+        if isinstance(monster, Ooze) and monster in self.oozes:
             return monster.center()
         if isinstance(monster, Chimera) and monster in self.chimeras:
             return monster.center()
@@ -775,7 +806,8 @@ class SimWorld:
         if isinstance(monster, Dragon):
             parts = [monster.body, monster.shoulder, monster.hip, monster.neck_base, monster.head]
         elif isinstance(
-            monster, (Displacer, Minotaur, Chimera, Elemental, Lich, Mimic, Hydra, Drake, Kobold)
+            monster,
+            (Displacer, Minotaur, Ooze, Chimera, Elemental, Lich, Mimic, Hydra, Drake, Kobold),
         ):
             parts = monster.parts()
         elif isinstance(monster, Worm):
@@ -817,6 +849,9 @@ class SimWorld:
         for minotaur in self.minotaurs:
             if minotaur.hits(point, margin=1.0):
                 return minotaur
+        for ooze in self.oozes:
+            if ooze.hits(point, margin=1.0):
+                return ooze
         for chimera in self.chimeras:
             if chimera.hits(point, margin=1.0):
                 return chimera
@@ -906,6 +941,7 @@ class SimWorld:
             self.devourers,
             self.displacers,
             self.minotaurs,
+            self.oozes,
             self.chimeras,
             self.elementals,
             self.liches,
@@ -958,6 +994,7 @@ class SimWorld:
         )
         self.displacer_planner = Planner(self.displacer_terrain, beast.MOVES)
         self.lizard_planner = Planner(self.displacer_terrain, LIZARD_MOVES)
+        self.ooze_planner = Planner(self.displacer_terrain, OOZE_MOVES)
         self.minotaur_terrain = Terrain(
             self.boxes,
             self.floor_y,
@@ -1021,6 +1058,8 @@ class SimWorld:
             displacer.terrain_changed(change)
         for minotaur in self.minotaurs:
             minotaur.terrain_changed(change)
+        for ooze in self.oozes:
+            ooze.terrain_changed(change)
         for chimera in self.chimeras:
             chimera.terrain_changed(change)
         for elemental in self.elementals:
@@ -1040,6 +1079,8 @@ class SimWorld:
             lizard.terrain_changed(change)
         self.necromancy.terrain_changed(change)
         for body in self.fallen:
-            if isinstance(body, (Displacer, Minotaur, Lich, Mimic, Hydra, Kobold, Elemental)):
+            if isinstance(
+                body, (Displacer, Minotaur, Ooze, Lich, Mimic, Hydra, Kobold, Elemental)
+            ):
                 body.terrain_changed(change)
         self.debris.terrain_changed(change)

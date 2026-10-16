@@ -116,7 +116,7 @@ class SnakeTail:
             return
         self.struck = True
         push = (quarry.center() - chimera.tail[-2]).normalized() * BITE_PUSH
-        if quarry.hurt(BITE_DAMAGE, head, push, "chimera", BITE_DEATH):
+        if quarry.hurt_from(chimera, BITE_DAMAGE, head, push, "chimera", BITE_DEATH):
             self.catches += 1
 
     def reset(self) -> None:

@@ -559,7 +559,9 @@ class Elemental(Mortal):
                     and abs(theirs.y - fist.y) <= MELEE_HEIGHT
                 ):
                     self._struck.add(stickman)
-                    stickman.hurt(MELEE_DAMAGE, fist, push, SOURCE[self.kind], DEATHS[self.kind])
+                    stickman.hurt_from(
+                        self, MELEE_DAMAGE, fist, push, SOURCE[self.kind], DEATHS[self.kind]
+                    )
         if t >= MELEE_TIME:
             self.melee_wait = MELEE_COOLDOWN
             self.action = None
@@ -667,8 +669,8 @@ class Elemental(Mortal):
             if not stickman.prey or stickman.contact().distance_to(anchor.point) > ERUPT_REACH:
                 continue
             push = Vec2(0.0, -200.0)
-            if not stickman.hurt(
-                ERUPT_DAMAGE, anchor.point, push, SOURCE["earth"], DEATHS["earth"]
+            if not stickman.hurt_from(
+                self, ERUPT_DAMAGE, anchor.point, push, SOURCE["earth"], DEATHS["earth"]
             ):
                 stickman.knock_down(anchor.point + Vec2(0.0, 20.0), 200.0, 0.8, 0.4)
 

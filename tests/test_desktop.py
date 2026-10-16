@@ -153,10 +153,8 @@ def test_goblin_pack_musters_on_the_floor_when_no_window_top_fits_it():
     assert all(g.contact().y == world.floor_y for g in world.goblins)
 
 
-def test_next_monster_now_rotates_through_every_defender_from_the_elementals():
+def test_next_monster_now_rotates_through_every_defender_from_the_chimera():
     world = DesktopSession(SCREEN, USABLE, FakeWindowSource([]), seed=5, max_stickmen=0)
-    assert world.defender == "elementals" and len(world.elementals) == 1 and not world.chimeras
-    world.rotate()
     assert world.defender == "chimera" and len(world.chimeras) == 1 and not world.lizards
     assert not world.elementals
     world.rotate()
@@ -193,7 +191,8 @@ def test_next_monster_now_rotates_through_every_defender_from_the_elementals():
     assert world.defender == "dragon" and len(world.dragons) == 1
     assert not world.goblins and not world.worms
     world.rotate()
-    assert world.defender == "elementals" and len(world.elementals) == 1
+    assert world.defender == "chimera" and len(world.chimeras) == 1
+    assert not world.elementals
     assert not world.dragons
 
 
@@ -283,7 +282,7 @@ def test_window_source_errors_keep_the_last_layout():
 
     source = Broken([WindowRecord(1, Rect(400, 500, 400, 200))])
     world = DesktopSession(SCREEN, USABLE, source, seed=1)
-    assert not world.goblins and len(world.elementals) == 1
+    assert not world.goblins and len(world.chimeras) == 1
     source.fail = True
     assert not world.poll()
     assert world.source_error == "window server unavailable"

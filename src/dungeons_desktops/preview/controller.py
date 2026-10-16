@@ -65,6 +65,15 @@ class RigPreviewController(SimWorld):
         self.add_stickman(variant=variant, wander=True)
         self.status = f"Added a wandering {variant}"
 
+    def spawn_dio(self) -> None:
+        hero = self.add_stickman(variant="hero_fighter", wander=True)
+        self.selected = hero
+        self.status = "Dio arrives with a divine trident and shield"
+
+    def spawn_hero_fighter(self) -> None:
+        """Compatibility name retained for older preview callers."""
+        self.spawn_dio()
+
     def next_class(self) -> None:
         classes = list(stick_figure.CLASSES)
         current = self.variant
@@ -115,6 +124,12 @@ class RigPreviewController(SimWorld):
         self.status = (
             "A minotaur stomps in - it charges and tramples, smashes and stomps, "
             "hurls adventurers, and enrages when shot"
+        )
+
+    def spawn_ooze(self) -> None:
+        self.add_ooze()
+        self.status = (
+            "An ooze hunts over floors, walls, and ceilings, then engulfs adventurers"
         )
 
     def spawn_hydra(self) -> None:

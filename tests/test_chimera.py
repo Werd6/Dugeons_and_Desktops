@@ -43,7 +43,7 @@ def calm(chimera: Chimera, lion: bool = True, goat: bool = True) -> None:
         chimera.goat.state, chimera.goat.timer = Fire.COOLDOWN, 1000.0
 
 
-def test_the_chimera_prowls_in_after_the_elementals_on_the_front_window():
+def test_the_chimera_prowls_in_first_on_the_front_window():
     world = DesktopSession(
         Rect(0, 0, 1400, 900),
         Rect(0, 30, 1400, 800),
@@ -51,8 +51,7 @@ def test_the_chimera_prowls_in_after_the_elementals_on_the_front_window():
         seed=3,
         max_stickmen=0,
     )
-    world.rotate()  # past the elementals
-    assert DEFENDERS[1] == "chimera" and world.defender == "chimera"
+    assert DEFENDERS[0] == "chimera" and world.defender == "chimera"
     assert DEFENDER_BARS["chimera"][0] == "Chimera"
     assert len(world.chimeras) == 1
     chimera = world.chimeras[0]

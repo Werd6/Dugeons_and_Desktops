@@ -926,7 +926,7 @@ class Mimic(Mortal):
         self.chomps += 1
         self.gulp = 1.0
         death = "Swallowed whole by a mimic!"
-        man.hurt(max(CHOMP_DAMAGE, man.hp), point, ZERO, "mimic", death, bleed=False)
+        man.hurt_from(self, max(CHOMP_DAMAGE, man.hp), point, ZERO, "mimic", death, bleed=False)
         man.swallowed = True
         self._lure_wait = LURE_DELAY
 
@@ -1194,7 +1194,7 @@ class Mimic(Mortal):
         self.chomp_at = point
         way = _sign((point - self.center()).dot(along(self.up)))
         push = along(self.up) * (way * CHOMP_PUSH) + Vec2(0.0, -CHOMP_PUSH * 0.4)
-        target.hurt(LEAP_DAMAGE, point, push, "mimic", "Chomped by a mimic!")
+        target.hurt_from(self, LEAP_DAMAGE, point, push, "mimic", "Chomped by a mimic!")
 
     def _fly(self, dt: float) -> None:
         leap = self.leap

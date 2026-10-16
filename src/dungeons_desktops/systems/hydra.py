@@ -1047,7 +1047,9 @@ class Hydra(Mortal):
             swept = before.y - 30.0 <= at.y <= glob.position.y + 30.0
             if swept and abs(at.x - glob.lane) <= glob.half:
                 push = Vec2(0.0, 220.0)
-                if stickman.hurt(GLOB_DAMAGE, at, push, GLOB_SOURCE, GLOB_DEATH, bleed=False):
+                if stickman.hurt_from(
+                    self, GLOB_DAMAGE, at, push, GLOB_SOURCE, GLOB_DEATH, bleed=False
+                ):
                     stickman.succumb("acid")
                     self.kills += 1
         if glob.position.y >= glob.floor:
@@ -2091,7 +2093,7 @@ class Hydra(Mortal):
             if not stickman.prey or not stickman.hits(mouth, radius):
                 continue
             push = Vec2.from_angle(head.angle, 240.0) + Vec2(0.0, -140.0)
-            if stickman.hurt(CHOMP_DAMAGE, mouth, push, "hydra", CHOMP_DEATH):
+            if stickman.hurt_from(self, CHOMP_DAMAGE, mouth, push, "hydra", CHOMP_DEATH):
                 self.kills += 1
 
     def _emit(self, head: Head, dt: float) -> None:
@@ -2149,8 +2151,14 @@ class Hydra(Mortal):
                     flame.position, radius * 0.6
                 ):
                     push = flame.velocity.normalized() * 160.0 + Vec2(0.0, -100.0)
-                    if stickman.hurt(
-                        ACID_DAMAGE, stickman.center(), push, "hydra", DEATH, bleed=False
+                    if stickman.hurt_from(
+                        self,
+                        ACID_DAMAGE,
+                        stickman.center(),
+                        push,
+                        "hydra",
+                        DEATH,
+                        bleed=False,
                     ):
                         stickman.succumb("acid")
                         self.kills += 1

@@ -701,7 +701,9 @@ class Dragon(Mortal):
 
     def _hit(self, stickman: Stickman, push: Vec2, death: str, bleed: bool = True) -> bool:
         """`DRAGON_DAMAGE` to `stickman`; True if it killed him."""
-        killed = stickman.hurt(DRAGON_DAMAGE, stickman.center(), push, "dragon", death, bleed)
+        killed = stickman.hurt_from(
+            self, DRAGON_DAMAGE, stickman.center(), push, "dragon", death, bleed
+        )
         self.catches += killed
         return killed
 

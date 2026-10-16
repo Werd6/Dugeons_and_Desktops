@@ -43,7 +43,7 @@ def test_the_pack_rides_in_three_drakes_of_different_random_colours_on_the_front
             FakeWindowSource([WindowRecord(1, window)]),
             seed=seed,
             max_stickmen=0,
-            defenders=DEFENDERS[3:],
+            defenders=DEFENDERS[DEFENDERS.index("drakes") :],
         )
         assert world.defender == "drakes"
         colours = [d.variant for d in world.drakes]

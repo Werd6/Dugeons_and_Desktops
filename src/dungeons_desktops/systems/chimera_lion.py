@@ -723,7 +723,9 @@ class LionController:
             return
         leap.struck = True
         push = self.velocity.normalized() * POUNCE_PUSH + Vec2(0.0, -120.0)
-        quarry.hurt(POUNCE_DAMAGE, middle, push, "chimera", "Mauled by the chimera!")
+        quarry.hurt_from(
+            self.chimera, POUNCE_DAMAGE, middle, push, "chimera", "Mauled by the chimera!"
+        )
 
     def _fall(self, dt: float) -> None:
         """Free fall: land on a top or the floor, or cling to a window it hits."""

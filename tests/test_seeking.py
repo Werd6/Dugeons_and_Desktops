@@ -215,7 +215,7 @@ def test_a_monster_beyond_the_seek_radius_goes_unnoticed():
             assert man.quarry is None
 
 
-@pytest.mark.parametrize("variant", ["ranger", "wizard", "alchemist"])
+@pytest.mark.parametrize("variant", ["ranger", "wizard", "alchemist", "sorcerer"])
 def test_a_shooter_closes_to_range_and_holds_there(variant):
     world = open_world()
     man = world.add_stickman(Vec2(100, FLOOR), variant, wander=True)

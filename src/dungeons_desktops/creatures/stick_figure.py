@@ -23,7 +23,10 @@ from dungeons_desktops.rig.weapons import (
     Bow,
     Daggers,
     DruidStaff,
+    FighterSword,
+    FireOrb,
     HammerAndShield,
+    HeroTridentAndShield,
     HolyStaff,
     Wand,
     Weapon,
@@ -87,18 +90,34 @@ class Calling:
     cooldown: float = 1.0
 
 
+WIZARD_REACH = 280.0
+CAST_COOLDOWN = 2.2
+PALADIN_COOLDOWN = 1.0
+
+
 CLASSES: dict[str, Calling] = {
     "barbarian": Calling(Axe, hp=2 * BASE_HP, reach=30.0, cooldown=0.9),
-    "wizard": Calling(Wand, reach=280.0, cooldown=2.2),
+    "wizard": Calling(Wand, reach=WIZARD_REACH, cooldown=CAST_COOLDOWN),
     "rogue": Calling(Daggers, speed=1.5, reach=24.0, cooldown=0.5),
-    "paladin": Calling(HammerAndShield, hp=2 * BASE_HP, reach=30.0, cooldown=1.0),
+    "paladin": Calling(HammerAndShield, hp=2 * BASE_HP, reach=30.0, cooldown=PALADIN_COOLDOWN),
     "ranger": Calling(Bow, reach=340.0, cooldown=1.6),
     "cleric": Calling(HolyStaff, cooldown=3.0),
     "alchemist": Calling(Bombs, reach=230.0, cooldown=1.8),
     "druid": Calling(DruidStaff, reach=60.0, cooldown=1.4),
+    "sorcerer": Calling(FireOrb, reach=WIZARD_REACH, cooldown=CAST_COOLDOWN),
+    "fighter": Calling(FighterSword, hp=2 * BASE_HP, reach=30.0, cooldown=PALADIN_COOLDOWN / 2),
 }
 """The adventurer classes that invade the desktop."""
-CALLINGS: dict[str, Calling] = {"unarmed": Calling(None), **CLASSES}
+HEROES: dict[str, Calling] = {
+    "hero_fighter": Calling(
+        HeroTridentAndShield,
+        hp=60,
+        reach=38.0,
+        cooldown=0.8,
+    ),
+}
+"""Named heroes, available explicitly rather than in the ordinary invader pool."""
+CALLINGS: dict[str, Calling] = {"unarmed": Calling(None), **CLASSES, **HEROES}
 
 
 def make_weapon(variant: str, layout: BipedLayout) -> Weapon | None:

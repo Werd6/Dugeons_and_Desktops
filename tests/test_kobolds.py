@@ -136,7 +136,7 @@ def test_riders_on_foot_fight_on_until_the_last_drake_dies_then_vanish():
         FakeWindowSource([WindowRecord(1, window)]),
         seed=3,
         max_stickmen=0,
-        defenders=DEFENDERS[3:],
+        defenders=DEFENDERS[DEFENDERS.index("drakes") :],
     )
     assert world.defender == "drakes"
     assert world.defender_max_hp == DRAKE_PACK * (DRAKE_HP + KOBOLD_HP)

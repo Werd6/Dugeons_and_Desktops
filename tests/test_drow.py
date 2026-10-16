@@ -58,9 +58,8 @@ def test_the_drow_ride_in_after_the_chimera_two_lizards_on_the_front_window():
         seed=3,
         max_stickmen=0,
     )
-    world.rotate()  # past the elementals
     world.rotate()  # past the chimera
-    assert DEFENDERS[2] == "drow" and world.defender == "drow"
+    assert DEFENDERS[1] == "drow" and world.defender == "drow"
     assert DEFENDER_BARS["drow"][0] == "Drow lizard riders"
     assert len(world.lizards) == 2 and all(z.mounted for z in world.lizards)
     assert all(z.support is not None and z.support.start.y == window.top for z in world.lizards)
@@ -271,7 +270,7 @@ def test_the_pack_holds_the_screen_until_the_dismounted_drow_are_dead_too():
         FakeWindowSource([WindowRecord(1, window)]),
         seed=3,
         max_stickmen=0,
-        defenders=DEFENDERS[2:],
+        defenders=DEFENDERS[DEFENDERS.index("drow") :],
     )
     for lizard in list(world.lizards):
         world.hurt_monster(lizard, LIZARD_HP, lizard.center(), Vec2(0.0, 0.0))

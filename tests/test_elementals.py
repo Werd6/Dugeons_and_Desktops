@@ -88,15 +88,17 @@ def all_effects(world, kind):
 # ----- one elemental, four forms -----------------------------------------------
 
 
-def test_a_single_water_elemental_rises_first_in_the_rotation():
+def test_elementals_are_opt_in_and_spawn_as_a_single_water_form():
     world = DesktopSession(
         Rect(0, 0, 1400, 900),
         Rect(0, 30, 1400, 800),
         FakeWindowSource([WindowRecord(1, WINDOW)]),
         seed=3,
         max_stickmen=0,
+        defenders=("elementals",),
     )
-    assert DEFENDERS[0] == "elementals" and world.defender == "elementals"
+    assert "elementals" not in DEFENDERS
+    assert world.defender == "elementals"
     assert DEFENDER_BARS["elementals"][0] == "Elemental"
     assert [e.kind for e in world.elementals] == ["water"]
     assert world.defender_max_hp == ELEMENTAL_HP == 4 * FORM_HP == 20
@@ -333,3 +335,29 @@ def test_it_collapses_and_fades_when_killed():
     assert elemental.collapse == 1.0
     run(world, 10.0)
     assert elemental not in world.fallen
+
+
+def test_whirlwind_carries_a_victim_along_its_direction_before_release():
+    world = world_with()
+    man = standing(world, Vec2(500, WINDOW.top))
+    run(world, 0.1)
+    man.knock_down(man.center() + Vec2(0, 10), 10, 1.5, 1)
+    start = man.center()
+    way = Vec2(0.6, -0.8)
+    effect = Caught(man, way)
+    for _ in range(10):
+        assert effect.update(world, STEP)
+    displacement = man.center() - start
+    assert displacement.distance_to(way * 50.0) < 0.01
+
+
+def test_wave_keeps_its_victim_with_the_front_until_the_edge():
+    world = world_with()
+    man = standing(world, Vec2(600, WINDOW.top))
+    run(world, 0.1)
+    wave = Wave(595, WINDOW.top, WINDOW.left, WINDOW.right, 0, 1)
+    for _ in range(10):
+        assert wave.update(world, STEP)
+    assert man in wave.swept and not man.animated
+    assert abs(man.center().x - (wave.x - 5)) < 0.01
+    assert man.damage == 1

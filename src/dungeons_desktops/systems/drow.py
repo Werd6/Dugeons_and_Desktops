@@ -422,7 +422,9 @@ class Lizard(Displacer):
         for stickman in self._prey():
             if stickman.hits(mouth, BITE_REACH + 2.0):
                 push = self.forward * BITE_PUSH + self.up * 60.0
-                stickman.hurt(BITE_DAMAGE, mouth, push, "lizard", "Bitten by a drow's lizard!")
+                stickman.hurt_from(
+                    self, BITE_DAMAGE, mouth, push, "lizard", "Bitten by a drow's lizard!"
+                )
                 return
 
     @property
@@ -612,6 +614,8 @@ class Drow(Goblin):
                 continue
             push = Vec2(self.facing * SCIMITAR_PUSH, -SCIMITAR_PUSH * 0.4)
             point = self._blade_point(target.center())
-            if target.hurt(SCIMITAR_DAMAGE, point, push, "drow", "Cut to ribbons by a drow!"):
+            if target.hurt_from(
+                self, SCIMITAR_DAMAGE, point, push, "drow", "Cut to ribbons by a drow!"
+            ):
                 self.kills += 1
                 return

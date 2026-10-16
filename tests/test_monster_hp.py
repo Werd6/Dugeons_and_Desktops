@@ -88,7 +88,7 @@ def test_a_missile_that_arrives_does_one_damage():
     assert goblin.damage == 1
 
 
-@pytest.mark.parametrize("name", ["ranger", "wizard"])
+@pytest.mark.parametrize("name", ["ranger", "wizard", "sorcerer"])
 def test_ranged_adventurers_wear_a_goblin_down(name):
     world = world_with()
     world.add_stickman(Vec2(300, FLOOR), name)

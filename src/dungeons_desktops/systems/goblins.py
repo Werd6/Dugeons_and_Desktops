@@ -418,7 +418,9 @@ class Goblin(Actor, Mortal):
             if target is not None and self._in_reach(target, slack=SWORD_STRIKE_REACH):
                 push = Vec2(self.facing * SWORD_PUSH, -SWORD_PUSH * 0.5)
                 point = self._blade_point(target.center())
-                target.hurt(GOBLIN_DAMAGE, point, push, "goblin", "Cut down by the goblins!")
+                target.hurt_from(
+                    self, GOBLIN_DAMAGE, point, push, "goblin", "Cut down by the goblins!"
+                )
         elif isinstance(weapon, SpearThrower) and weapon.take_release():
             if target is not None and target.prey:
                 velocity = self._spear_arc(target)

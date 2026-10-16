@@ -554,7 +554,7 @@ class Drake(Mortal):
                     if stickman.hits(point, BITE_REACH + 2.0):
                         push = Vec2(self.facing * BITE_PUSH, -90.0)
                         death = f"Torn apart by a {self.variant} drake!"
-                        stickman.hurt(BITE_DAMAGE, point, push, "drake", death)
+                        stickman.hurt_from(self, BITE_DAMAGE, point, push, "drake", death)
                         break
             return
         if self.mode is not DrakeMode.WALK or self.bite_cooldown > 0.0:
@@ -836,7 +836,9 @@ class Drake(Mortal):
             away = (stickman.center() - center).normalized()
             push = away * 220.0 + Vec2(0.0, -140.0)
             death = BOLT_DEATHS[self.variant]
-            if stickman.hurt(BOLT_DAMAGE, stickman.center(), push, "drake", death, bleed=False):
+            if stickman.hurt_from(
+                self, BOLT_DAMAGE, stickman.center(), push, "drake", death, bleed=False
+            ):
                 stickman.succumb(breath)
 
     # ----- death -------------------------------------------------------------------

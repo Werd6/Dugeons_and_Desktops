@@ -1402,7 +1402,7 @@ class Minotaur(Mortal):
             body = stickman.center()
             push = Vec2(way * TRAMPLE_FLING, -TRAMPLE_FLING * 0.5)
             death = "Gored and trampled by the minotaur!"
-            if stickman.hurt(TRAMPLE_DAMAGE, body, push, "minotaur", death):
+            if stickman.hurt_from(self, TRAMPLE_DAMAGE, body, push, "minotaur", death):
                 self.kills["charge"] += 1
             elif stickman.animated:
                 stickman.knock_down(
@@ -1513,7 +1513,7 @@ class Minotaur(Mortal):
             else:
                 push = Vec2(self.facing * PUNCH_PUSH, -PUNCH_PUSH * 0.35)
                 death = "Laid out by the minotaur's fist!"
-            if stickman.hurt(PUNCH_DAMAGE, fist, push, "minotaur", death):
+            if stickman.hurt_from(self, PUNCH_DAMAGE, fist, push, "minotaur", death):
                 self.kills["punch"] += 1
 
     # ----- the swipe off a wall ---------------------------------------------------------
@@ -1681,7 +1681,7 @@ class Minotaur(Mortal):
             way = (fist - shoulder).normalized()
             push = way * SWIPE_PUSH + Vec2(0.0, -60.0)
             death = "Swatted off the wall by the minotaur!"
-            if stickman.hurt(SWIPE_DAMAGE, fist, push, "minotaur", death):
+            if stickman.hurt_from(self, SWIPE_DAMAGE, fist, push, "minotaur", death):
                 self.kills["swipe"] += 1
 
     def _try_smash(self, foe: Stickman) -> bool:
@@ -1752,7 +1752,7 @@ class Minotaur(Mortal):
             self._struck.add(stickman)
             push = Vec2(self.facing * SMASH_PUSH, 30.0)
             death = "Smashed into the ground by the minotaur!"
-            if stickman.hurt(SMASH_DAMAGE, ground, push, "minotaur", death):
+            if stickman.hurt_from(self, SMASH_DAMAGE, ground, push, "minotaur", death):
                 self.kills["smash"] += 1
             elif stickman.animated:
                 stickman.knock_down(ground, SMASH_PUSH * 0.6, 0.7, 0.3)
@@ -1896,7 +1896,7 @@ class Minotaur(Mortal):
                 else Vec2(self.facing * THROW_PUSH, -80.0)
             )
             death = "Blown apart by a hurled adventurer!"
-            if other.hurt(THROW_DAMAGE, point, push, "minotaur", death):
+            if other.hurt_from(self, THROW_DAMAGE, point, push, "minotaur", death):
                 self.kills["throw"] += 1
             elif other.animated:
                 other.knock_down(point, THROW_PUSH, 0.9, 0.45)
@@ -1910,7 +1910,7 @@ class Minotaur(Mortal):
             return
         push = velocity if velocity.length() > 1.0 else Vec2(self.facing * 220.0, -80.0)
         death = "Hurled by the minotaur!"
-        if not man.hurt(THROW_SELF, man.center(), push, "minotaur", death):
+        if not man.hurt_from(self, THROW_SELF, man.center(), push, "minotaur", death):
             man.knock_down(man.center(), push.length(), 1.0, 0.5)
 
     def _try_stomp(self, foe: Stickman) -> bool:
@@ -1950,7 +1950,7 @@ class Minotaur(Mortal):
             self._struck.add(stickman)
             push = Vec2(self.facing * STOMP_PUSH, 40.0)
             death = "Stomped flat by the minotaur!"
-            if stickman.hurt(STOMP_DAMAGE, ground, push, "minotaur", death):
+            if stickman.hurt_from(self, STOMP_DAMAGE, ground, push, "minotaur", death):
                 self.kills["stomp"] += 1
             elif stickman.animated:
                 stickman.knock_down(ground, STOMP_FLING, STOMP_DOWN, STOMP_STUN)
@@ -1981,7 +1981,9 @@ class Minotaur(Mortal):
             body = stickman.center()
             push = (body - point).normalized() * STOMP_FLING
             death = "Flattened by the minotaur's stomp!"
-            if stickman.hurt(STOMP_QUAKE, body, push, "minotaur", death, bleed=False):
+            if stickman.hurt_from(
+                self, STOMP_QUAKE, body, push, "minotaur", death, bleed=False
+            ):
                 self.kills["quake"] += 1
             elif stickman.animated:
                 stickman.knock_down(point, STOMP_FLING, STOMP_DOWN, STOMP_STUN)
@@ -2237,7 +2239,7 @@ class Minotaur(Mortal):
             side = _sign(body.x - point.x, default=self.facing)
             push = Vec2(side * 60.0, 80.0)
             death = "Flattened under the falling minotaur!"
-            if stickman.hurt(CRUSH_DAMAGE, body, push, "minotaur", death):
+            if stickman.hurt_from(self, CRUSH_DAMAGE, body, push, "minotaur", death):
                 self.kills["crush"] += 1
             elif stickman.animated:
                 stickman.knock_down(point, CRUSH_FLING, CRUSH_DOWN, CRUSH_STUN)

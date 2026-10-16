@@ -173,7 +173,15 @@ class GoatHead:
         for stickman, flame in burn_hits(self.flames, world.stickmen):
             push = flame.velocity.normalized() * FIRE_PUSH + Vec2(0.0, -120.0)
             middle = stickman.center()
-            if stickman.hurt(CHIMERA_FIRE_DAMAGE, middle, push, FIRE_SOURCE, FIRE_DEATH, False):
+            if stickman.hurt_from(
+                chimera,
+                CHIMERA_FIRE_DAMAGE,
+                middle,
+                push,
+                FIRE_SOURCE,
+                FIRE_DEATH,
+                False,
+            ):
                 stickman.succumb("fire")
                 self.catches += 1
 

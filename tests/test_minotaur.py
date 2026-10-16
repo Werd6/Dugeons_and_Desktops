@@ -616,11 +616,10 @@ def test_it_never_targets_a_thrall():
 
 
 def test_it_follows_the_lich_in_the_desktop_rotation_and_fills_the_health_bar():
-    assert DEFENDERS[6:8] == ("lich", "minotaur")
+    assert DEFENDERS[5:7] == ("lich", "minotaur")
     screen, usable = Rect(0, 0, 1400, 900), Rect(0, 30, 1400, 800)
     source = FakeWindowSource([WindowRecord(1, Rect(400, 400, 400, 200))])
     session = DesktopSession(screen, usable, source, seed=2, max_stickmen=0)
-    session.rotate()  # past the elementals
     session.rotate()  # past the chimera
     session.rotate()  # past the drow
     session.rotate()  # past the drake riders

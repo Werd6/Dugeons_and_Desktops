@@ -112,7 +112,6 @@ def test_skeletons_are_not_the_defender_and_crumble_when_the_lich_falls():
     screen, usable = Rect(0, 0, 1400, 900), Rect(0, 30, 1400, 800)
     source = FakeWindowSource([WindowRecord(1, Rect(400, 400, 400, 200))])
     session = DesktopSession(screen, usable, source, seed=2, max_stickmen=0)
-    session.rotate()  # past the elementals
     session.rotate()  # past the chimera
     session.rotate()  # past the drow
     session.rotate()  # past the drake riders

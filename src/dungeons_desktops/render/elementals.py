@@ -2,15 +2,10 @@
 arms rising out of a swirling column of its element that narrows to a tip on the
 ground:
 
-- fire: a hunched, horned flame demon with a clawed hand, flames licking up its back,
-  its column one big S of flame, with a white-hot heart and flickering edges;
-- air: a whirlwind with its fists up like a boxer, bands of wind spiralling up it,
-  kicking up dust where it touches down;
-- earth: a hulking heap of rock with huge fists, green crystals and glowing eyes, its
-  column a dusty vortex with rocks wheeling round it;
-- water: a wave rising off its back and breaking over its head like a hood, foam on
-  the lip, spray flicking off its hand, foam spiralling down its column and droplets
-  flung about it.
+- water: a breaking wave hood, foam spiralling down its column and flying spray;
+- earth: a hulking heap of rock with huge fists, green crystals and glowing eyes;
+- air: a boxer made of wind, narrowing into a tornado as its bands spin faster;
+- fire: a horned flame demon with a white-hot heart, claws and flickering edges.
 
 All four share the earth elemental's build (`_torso`): broad hunched shoulders, the
 head pushed forward, one heavy arm hanging forward and the other behind.
@@ -26,12 +21,30 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPolygonF, QTransform
 
 from dungeons_desktops.core.geometry import Vec2, smoothstep
-from dungeons_desktops.render.draw import qt, world_pen
-from dungeons_desktops.systems.elementals import SCALE, Elemental
+from dungeons_desktops.render.draw import draw_fire, qt, world_pen
+from dungeons_desktops.systems.elemental_powers import (
+    SLAM_RECOVER,
+    BurningPatch,
+    Caught,
+    FireballShot,
+    Shockwave,
+    Wave,
+)
+from dungeons_desktops.systems.elementals import (
+    HEIGHT,
+    MELEE_RECOVER,
+    MELEE_STRIKE,
+    MELEE_TIME,
+    MELEE_WINDUP,
+    RAISED_HAND,
+    SCALE,
+    ZERO,
+    Elemental,
+)
 
 FIRE_DEEP = QColor(206, 82, 22)
 FIRE = QColor(242, 146, 36)
@@ -59,7 +72,7 @@ WATER_DARK = QColor(34, 74, 120)
 WATER_LIGHT = QColor(140, 200, 236)
 FOAM = QColor(230, 244, 252)
 
-COLOURS = {"fire": FIRE, "air": AIR_LIGHT, "earth": CRYSTAL, "water": WATER_LIGHT}
+COLOURS = {"water": WATER_LIGHT, "earth": CRYSTAL, "air": AIR_LIGHT, "fire": FIRE}
 """Each one's colour for its health bar."""
 
 
@@ -85,11 +98,25 @@ def draw_elementals(
 
 
 def draw_elemental(painter: QPainter, elemental: Elemental, outline: QColor | None = None) -> None:
+    # Effects have their own lifetime, including while the owner is underground or dead.
+    _effects(painter, elemental)
+    if elemental.sunk >= 1.0:
+        return
     look = LOOKS[elemental.kind](elemental)
     collapse = smoothstep(elemental.collapse)
     painter.save()
-    painter.translate(qt(elemental.feet))
+    if elemental.sunk > 0.0:
+        painter.setClipRect(
+            QRectF(-1e5, -1e5, 2e5, 1e5 + elemental.feet.y + 1.0),
+            Qt.ClipOperation.IntersectClip,
+        )
+    painter.translate(qt(elemental.feet + Vec2(0.0, HEIGHT * 1.5 * elemental.sunk)))
     painter.rotate(math.degrees(elemental.lean * elemental.facing))
+    if elemental.dash_way is not None:
+        way = elemental.dash_way
+        painter.rotate(math.degrees(math.atan2(way.x, -way.y)) * elemental.spin)
+    shift = smoothstep(elemental.shifting)
+    painter.scale(1.0 - 0.55 * shift, 1.0 - 0.95 * shift)
     painter.scale(
         SCALE * elemental.facing * (1.0 + 0.35 * collapse), SCALE * (1.0 - 0.8 * collapse)
     )
@@ -391,6 +418,7 @@ def _earth(e: Elemental) -> Look:
         """Raised overhead for a slam, then brought down on the ground."""
         arm = _raised(arm, chest + up, lift, Vec2(-3.0, 0.0))
         return _raised(arm, chest + down, slam, Vec2(6.0, -2.0))
+
     rocks = []
     for k in range(7):
         u = 0.15 + 0.7 * (k / 6)
@@ -590,7 +618,9 @@ def _air(e: Elemental) -> Look:
     for k in range(4):
         f = (k / 4 + whirl) % 1.0
         y = chest.y + 8.0 - 19.0 * f
-        half = 10.5 * (1.0 - 0.6 * spin) * math.sqrt(max(0.0, 1.0 - ((y - chest.y + 2.0) / 12.0) ** 2))
+        half = (
+            10.5 * (1.0 - 0.6 * spin) * math.sqrt(max(0.0, 1.0 - ((y - chest.y + 2.0) / 12.0) ** 2))
+        )
         band = [
             Vec2(chest.x - half, y - 1.0),
             Vec2(chest.x, y + 2.0),
@@ -686,7 +716,12 @@ def _fire(e: Elemental) -> Look:
         near_shoulder + Vec2(7.0, 6.0),
         near_shoulder + Vec2(9.0 + reach, 15.0),
     ]
+    near_arm = _raised(near_arm, RAISED_HAND, _windup(e), Vec2(6.0, 0.0))
+    near_arm = _pushed(near_arm, _punch(e))
     hand = near_arm[-1] + Vec2(0.5, 1.5)
+    if e.charge > 0.0:
+        look.fill(_blob(hand + Vec2(0.0, -7.0), 5.0 * e.charge, 7.0 * e.charge), FIRE_LIGHT)
+        look.fill(_blob(hand + Vec2(0.0, -7.0), 2.5 * e.charge, 4.0 * e.charge), FIRE_CORE)
     for k in range(3):
         claw = hand + Vec2(-2.0 + 2.2 * k, 2.5)
         look.fill(
@@ -719,3 +754,54 @@ def _fire(e: Elemental) -> Look:
 
 
 LOOKS = {"water": _water, "earth": _earth, "air": _air, "fire": _fire}
+
+
+def _effects(painter: QPainter, elemental: Elemental) -> None:
+    """World-space effects stay independent of the body's transforms and opacity."""
+    painter.save()
+    for effect in elemental.effects:
+        if isinstance(effect, Wave):
+            painter.save()
+            painter.translate(effect.x, effect.y)
+            painter.scale(effect.direction, max(0.05, effect.size))
+            crest = QPainterPath()
+            crest.moveTo(-28.0, 0.0)
+            crest.cubicTo(-20.0, -12.0, -15.0, -40.0, 3.0, -35.0)
+            crest.cubicTo(20.0, -32.0, 15.0, -18.0, 5.0, -21.0)
+            crest.cubicTo(14.0, -12.0, 12.0, -4.0, 19.0, 0.0)
+            crest.closeSubpath()
+            painter.fillPath(crest, WATER)
+            painter.strokePath(crest, world_pen(WATER_LIGHT, 2.0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(FOAM)
+            for k in range(5):
+                painter.drawEllipse(qt(Vec2(2.0 + k * 2.5, -34.0 + k * 2.0)), 2.3, 1.8)
+            painter.restore()
+        elif isinstance(effect, Shockwave):
+            for side in (-1, 1):
+                end = max(effect.low, min(effect.high, effect.x + side * effect.radius))
+                points = [
+                    Vec2(effect.x + (end - effect.x) * k / 12, effect.y - (k % 2) * 3)
+                    for k in range(13)
+                ]
+                painter.strokePath(_line(points), world_pen(ROCK_LIGHT, 2.5))
+                painter.strokePath(_line(points), world_pen(CRYSTAL, 1.0))
+        elif isinstance(effect, (FireballShot, BurningPatch)):
+            draw_fire(painter, effect.flames)
+            if isinstance(effect, FireballShot) and not effect.burst:
+                painter.setPen(world_pen(FIRE, 2.0))
+                painter.setBrush(FIRE_LIGHT)
+                painter.drawEllipse(qt(effect.position), 6.0, 6.0)
+                painter.setBrush(FIRE_CORE)
+                painter.drawEllipse(qt(effect.position), 3.0, 3.0)
+        elif isinstance(effect, Caught):
+            center = effect.stickman.center()
+            for k in range(3):
+                y = center.y - 12.0 + k * 10.0
+                points = [
+                    Vec2(center.x - 15.0, y),
+                    Vec2(center.x, y + 4.0),
+                    Vec2(center.x + 15.0, y - 2.0),
+                ]
+                painter.strokePath(_line(_smooth(points)), world_pen(AIR_LIGHT, 1.5))
+    painter.restore()

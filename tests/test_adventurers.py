@@ -18,7 +18,7 @@ def run(world: SimWorld, seconds: float) -> None:
         world.advance(DT)
 
 
-def test_base_hp_is_four_and_barbarians_and_paladins_have_double():
+def test_base_hp_is_four_and_barbarians_paladins_and_fighters_have_double():
     world = world_with()
     hp = {name: world.add_stickman(Vec2(100, 700), name).max_hp for name in CLASSES}
     assert BASE_HP == 4
@@ -31,6 +31,8 @@ def test_base_hp_is_four_and_barbarians_and_paladins_have_double():
         "cleric": 4,
         "alchemist": 4,
         "druid": 4,
+        "sorcerer": 4,
+        "fighter": 8,
     }
 
 
@@ -105,7 +107,7 @@ def test_ranger_shoots_arrows_at_a_goblin():
     assert shot
 
 
-@pytest.mark.parametrize("name", ["barbarian", "rogue", "paladin"])
+@pytest.mark.parametrize("name", ["barbarian", "rogue", "paladin", "fighter"])
 def test_melee_classes_swing_at_an_adjacent_goblin(name):
     world = world_with()
     fighter = world.add_stickman(Vec2(300, 700), name, wander=True)
@@ -117,12 +119,12 @@ def test_melee_classes_swing_at_an_adjacent_goblin(name):
     assert swung
 
 
-@pytest.mark.parametrize("name", ["barbarian", "wizard", "ranger"])
+@pytest.mark.parametrize("name", ["barbarian", "wizard", "ranger", "sorcerer", "fighter"])
 def test_turns_round_to_attack_a_monster_behind_it_even_when_not_wandering(name):
     world = world_with()
     fighter = world.add_stickman(Vec2(400, 700), name)
     fighter.follower.facing = 1
-    world.add_goblin(Vec2(400 - (18 if name == "barbarian" else 150), 700), "flag")
+    world.add_goblin(Vec2(400 - (18 if name in ("barbarian", "fighter") else 150), 700), "flag")
     attacked = False
     for _ in range(int(1.0 / DT)):
         world.advance(DT)

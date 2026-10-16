@@ -7,6 +7,8 @@ the world turns each one into damage.
   their target, a third of a wave apart, converging as they arrive. They home in on
   the monster they were cast at and burst into sparks there, hitting it if it's
   still there to hit.
+- A sorcerer's fire spark uses the same homing flight and hit handling as a
+  magic missile, with one straight, fiery dart.
 - Arrows fly ballistic and stick where they land, or break on (and hit) a monster.
 - A heal pulse is a white ring spreading out from a cleric.
 - A druid's vine lashes up out of the ground at his feet and snakes straight to its
@@ -79,6 +81,7 @@ class Missile:
     darts: list[list[Vec2]] = field(default_factory=list)
     """Each dart's recent positions, newest last."""
     owner: object = None
+    kind: str = "magic"
 
     @property
     def flight(self) -> float:
@@ -86,6 +89,8 @@ class Missile:
 
     def dart(self, index: int, t: float) -> Vec2:
         line = self.target - self.origin
+        if self.kind == "fire":
+            return self.origin + line * t
         side = line.normalized().rotated(math.pi / 2)
         phase = 2.0 * math.pi * index / MISSILE_DARTS
         wave = math.sin(2.0 * math.pi * MISSILE_WAVES * t + phase)
@@ -162,10 +167,17 @@ class Spells:
         self.sparks: list[Spark] = []
 
     def cast_missile(
-        self, origin: Vec2, monster: object, at: Vec2, hostile: bool = False, owner: object = None
+        self,
+        origin: Vec2,
+        monster: object,
+        at: Vec2,
+        hostile: bool = False,
+        owner: object = None,
+        *,
+        kind: str = "magic",
     ) -> None:
-        missile = Missile(origin, at, monster, hostile, owner=owner)
-        missile.darts = [[origin] for _ in range(MISSILE_DARTS)]
+        missile = Missile(origin, at, monster, hostile, owner=owner, kind=kind)
+        missile.darts = [[origin] for _ in range(1 if kind == "fire" else MISSILE_DARTS)]
         self.missiles.append(missile)
 
     def shoot(
@@ -230,7 +242,7 @@ class Spells:
             if t < 1.0:
                 flying.append(missile)
             else:
-                self.sparkle(missile.target, "magic", 14, 140.0)
+                self.sparkle(missile.target, missile.kind, 14, 140.0)
                 if now is not None:
                     heading = (missile.target - missile.origin).normalized()
                     velocity = heading * MISSILE_SPEED

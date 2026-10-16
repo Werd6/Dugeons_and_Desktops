@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
@@ -107,8 +109,9 @@ def _ranged_thrall_hits(variant, seed=4):
     return world, victim
 
 
-def test_a_wizard_thrall_casts_magic_missiles_at_the_others():
-    world, victim = _ranged_thrall_hits("wizard")
+@pytest.mark.parametrize("variant", ["wizard", "sorcerer"])
+def test_a_caster_thrall_casts_missiles_at_the_others(variant):
+    world, victim = _ranged_thrall_hits(variant)
     assert run(world, 6.0, until=lambda: bool(world.spells.missiles))
     assert world.spells.missiles[0].hostile and world.spells.missiles[0].monster is victim
     assert run(world, 3.0, until=lambda: victim.damage > 0)

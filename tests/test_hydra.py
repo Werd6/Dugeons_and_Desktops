@@ -489,11 +489,10 @@ def test_it_has_hydra_hp_dies_limp_and_fades():
 
 
 def test_it_follows_the_drakes_in_the_desktop_rotation_and_fills_the_health_bar():
-    assert DEFENDERS[:5] == ("elementals", "chimera", "drow", "drakes", "hydra")
+    assert DEFENDERS[:4] == ("chimera", "drow", "drakes", "hydra")
     screen, usable = Rect(0, 0, 1400, 900), Rect(0, 30, 1400, 800)
     source = FakeWindowSource([WindowRecord(1, Rect(400, 400, 400, 200))])
     session = DesktopSession(screen, usable, source, seed=2, max_stickmen=0)
-    session.rotate()  # past the elementals
     session.rotate()  # past the chimera
     session.rotate()  # past the drow
     session.rotate()  # past the drake riders

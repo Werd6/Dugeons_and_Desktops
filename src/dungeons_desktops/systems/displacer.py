@@ -1173,7 +1173,7 @@ class Displacer(Mortal):
             if hit is None:
                 continue
             self._struck.add(stickman)
-            stickman.hurt(damage, hit, shove_of, "displacer", death)
+            stickman.hurt_from(self, damage, hit, shove_of, "displacer", death)
 
     def stab_at(self, t: float) -> tuple[Vec2, float]:
         """Which way (in the world) its tentacles spear from the shoulder and how far,
@@ -1344,7 +1344,7 @@ class Displacer(Mortal):
             if leap.kind == "frenzy"
             else "Mauled by the displacer beast!"
         )
-        leap.killed = quarry.hurt(POUNCE_DAMAGE, middle, push, "displacer", death)
+        leap.killed = quarry.hurt_from(self, POUNCE_DAMAGE, middle, push, "displacer", death)
         if leap.killed and leap.kind == "frenzy" and self.frenzy_left > 0.0:
             self._frenzy_kill()
 

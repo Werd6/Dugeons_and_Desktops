@@ -403,9 +403,14 @@ class StickMode(Enum):
 
 class Stickman(Actor):
     def __init__(
-        self, world: World, anchor: Anchor, variant: str = "unarmed", wander: bool = False
+        self,
+        world: World,
+        anchor: Anchor,
+        variant: str = "unarmed",
+        wander: bool = False,
+        layout: BipedLayout | None = None,
     ) -> None:
-        super().__init__(world, stick_figure.build_stick_figure(), anchor)
+        super().__init__(world, layout or stick_figure.build_stick_figure(), anchor)
         self.ragdoll = Ragdoll(
             self.layout.skeleton,
             ground_y=world.floor_y,
@@ -425,6 +430,7 @@ class Stickman(Actor):
         self.damage = 0
         """Damage taken; at `max_hp` he goes down."""
         self._grace: dict[str, float] = {}
+        self._incoming_attacker: object | None = None
         self.cooldown = 0.0
         self.foe: object | None = None
         """The monster the current attack is aimed at."""
@@ -453,6 +459,8 @@ class Stickman(Actor):
         """The mimic reeling him in on its tongue."""
         self.swallowed = False
         """Swallowed whole by a mimic: gone, body and all."""
+        self.engulfed_by: object | None = None
+        """The ooze holding this adventurer, who remains able to attack from inside."""
         self.blind = 0.0
         """Seconds left blind (in a drow's globe of darkness): he can't attack, and gropes
         about slowly instead of going anywhere."""
@@ -476,7 +484,7 @@ class Stickman(Actor):
     @property
     def prey(self) -> bool:
         """Fair game for the monsters: on his feet and in his right mind."""
-        return self.animated and not self.thrall
+        return self.animated and not self.thrall and self.engulfed_by is None
 
     @property
     def paralysed(self) -> bool:
@@ -540,7 +548,7 @@ class Stickman(Actor):
         """Attack now: at the nearest monster in reach, else straight ahead."""
         weapon = self.weapon
         if weapon is None:
-            self.say("Unarmed - press 1-8 to pick a class")
+            self.say("Unarmed - press 1-9 or 0 to pick a class")
             return
         if not self.animated or weapon.busy:
             return
@@ -556,6 +564,8 @@ class Stickman(Actor):
         or mid-climb-over. Never while he's blind."""
         if self.blind > 0.0:
             return False
+        if self.engulfed_by is not None:
+            return True
         return self.locomotion.mode in ACTING_MODES and not self.follower.in_transition
 
     def _engage(self) -> bool:
@@ -740,7 +750,12 @@ class Stickman(Actor):
             point = locate(self.foe) or point
         if isinstance(weapon, Wand):
             world.spells.cast_missile(
-                weapon.tip(transforms, facing), self.foe, point, hostile, owner=self
+                weapon.tip(transforms, facing),
+                self.foe,
+                point,
+                hostile,
+                owner=self,
+                kind=weapon.missile_kind,
             )
         elif isinstance(weapon, Bow):
             nock = self._shot_origin(weapon.nock(transforms, facing)[0], transforms)
@@ -781,6 +796,9 @@ class Stickman(Actor):
                 self._burn(dt)
             elif self.demise is not None:
                 self._succumb(dt)
+            return
+        if self.engulfed_by is not None:
+            self._engulfed_update(dt)
             return
         for source in self._grace:
             self._grace[source] -= dt
@@ -823,6 +841,49 @@ class Stickman(Actor):
             command = self.follower.command()
         else:
             command = self.follower.update(dt * self.calling.speed)
+        self.locomotion.update(dt, command)
+        self._update_weapon()
+        self.ragdoll.facing = self.locomotion.facing
+        self.ragdoll.drive(self.locomotion.pose, dt)
+        self._track_velocity(dt)
+
+    def engulf(self, ooze: object) -> None:
+        """Float inside an ooze while keeping the normal weapon and attack logic."""
+        if self.lure is not None:
+            self.free_from_lure()
+        if self.reeled is not None:
+            self.free_from_reel(drop=False)
+        self.engulfed_by = ooze
+        self.goal = None
+        self._resume_route = False
+        self.halt()
+
+    def free_from_ooze(self, point: Vec2) -> None:
+        self.engulfed_by = None
+        if not self.animated:
+            return
+        anchor = surface_below(self.planner, point)
+        self.follower.reset(anchor)
+        self.locomotion.teleport(self.follower.command())
+        self.ragdoll.drive(self.locomotion.pose, self.world.step)
+
+    def _engulfed_update(self, dt: float) -> None:
+        ooze = self.engulfed_by
+        if ooze is None:
+            return
+        self.faerie = max(0.0, self.faerie - dt)
+        for source in self._grace:
+            self._grace[source] -= dt
+        self.cooldown -= dt
+        weapon = self.weapon
+        if weapon is not None and not weapon.busy and self.dragging_limb is None:
+            if self.cooldown <= 0.0 and self._engage():
+                self.cooldown = self.calling.cooldown
+            else:
+                self._face_nearest_monster()
+        feet = ooze.engulfed_feet(self)  # type: ignore[attr-defined]
+        facing = 1 if ooze.center().x >= self.center().x else -1  # type: ignore[attr-defined]
+        command = LocomotionInput(PoseMode.AIR, feet, facing, ("engulfed", id(ooze)), blend=0.1)
         self.locomotion.update(dt, command)
         self._update_weapon()
         self.ragdoll.facing = self.locomotion.facing
@@ -1211,10 +1272,12 @@ class Stickman(Actor):
         source: str,
         death: str,
         bleed: bool = True,
+        attacker: object | None = None,
     ) -> bool:
         """`amount` damage from `source` ("goblin", "dragon", "worm") landing at `point`,
         shoving along `push`. At 0 HP he goes down (saying `death`) and it counts as a
-        kill. Returns True if this hit killed him."""
+        kill. `attacker`, when known, lets named heroes answer the creature that
+        landed the hit. Returns True if this hit killed him."""
         if not self.animated or self._grace.get(source, 0.0) > 0.0:
             return False
         if source in HURT_GRACE:
@@ -1238,6 +1301,29 @@ class Stickman(Actor):
             self.world.spawn_devourer(head)
             self.say("An intellect devourer bursts from its skull!")
         return True
+
+    def hurt_from(
+        self,
+        attacker: object,
+        amount: int,
+        point: Vec2,
+        push: Vec2,
+        source: str,
+        death: str,
+        bleed: bool = True,
+    ) -> bool:
+        """Attribute a hit without changing the long-standing ``hurt`` call shape.
+
+        Keeping the attacker in a short-lived context also preserves compatibility with
+        preview and test doubles that replace ``hurt`` with the original six-argument
+        callable.
+        """
+        previous = self._incoming_attacker
+        self._incoming_attacker = attacker
+        try:
+            return self.hurt(amount, point, push, source, death, bleed)
+        finally:
+            self._incoming_attacker = previous
 
     def heal(self, amount: int) -> None:
         self.damage = max(0, self.damage - amount)

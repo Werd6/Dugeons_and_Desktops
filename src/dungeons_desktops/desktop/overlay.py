@@ -12,11 +12,12 @@ import signal
 import sys
 import time
 
-from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap, QScreen
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.desktop.menu import DefenderMenu, load_defenders
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import (
     FakeWindowSource,
@@ -35,10 +36,12 @@ from dungeons_desktops.render.draw import (
     GOBLIN_HEAD,
     GOBLIN_SKIN,
     HEALTH_BAR_HEIGHT,
+    HERO_SILVER,
     OUTLINE,
     WORM_SKIN,
     draw_actors,
     draw_debris,
+    draw_dio_effects,
     draw_displacers,
     draw_dragon,
     draw_fallen,
@@ -71,6 +74,8 @@ from dungeons_desktops.render.lich import GLOW, draw_liches
 from dungeons_desktops.render.mimic import WOOD_LIGHT, draw_mimics
 from dungeons_desktops.render.minotaur import HIDE_LIGHT
 from dungeons_desktops.render.necromancy import draw_necromancy, draw_scorches
+from dungeons_desktops.render.ooze import BODY as OOZE_BODY
+from dungeons_desktops.render.ooze import draw_oozes
 
 FRAME_MS = 16
 POLL_FAST_MS = 125
@@ -84,6 +89,7 @@ COUNTER_GAP = 6.0
 KILL_BUMP_TIME = 0.5
 DEFENDER_BARS = {
     "elementals": ("Elemental", WATER_LIGHT),
+    "ooze": ("Ooze", OOZE_BODY),
     "chimera": ("Chimera", MANE.lighter(130)),
     "drow": ("Drow lizard riders", FAERIE),
     "drakes": ("Kobold drake riders", QColor(214, 120, 64)),
@@ -164,6 +170,7 @@ class DesktopOverlay(QWidget):
         draw_mimics(painter, session.mimics, outline=OUTLINE)
         draw_skeletons(painter, session.skeletons, outline=OUTLINE)
         draw_actors(painter, session.goblins, session.stickmen, outline=OUTLINE)
+        draw_oozes(painter, session.oozes, outline=OUTLINE)
         draw_darkness(painter, session.darkness, session.stickmen)
         draw_lizards(painter, session.lizards, outline=OUTLINE)
         draw_drow(painter, session.drow, outline=OUTLINE)
@@ -171,6 +178,7 @@ class DesktopOverlay(QWidget):
             draw_dragon(painter, dragon, outline=OUTLINE)
         draw_mindflayers(painter, session.mindflayers, session.devourers, outline=OUTLINE)
         draw_displacers(painter, session.displacers, outline=OUTLINE)
+        draw_dio_effects(painter, session.heroes, outline=OUTLINE)
         draw_projectiles(painter, session.projectiles)
         draw_spells(painter, session.spells)
         draw_necromancy(painter, session.necromancy)
@@ -196,6 +204,15 @@ class DesktopOverlay(QWidget):
         if self.session.defender == "elementals" and self.session.elementals:
             form = self.session.elementals[0].kind
             bar = (f"{form.capitalize()} elemental", ELEMENT_COLOURS[form])
+        for hero_name, hero_health in reversed(self.session.hero_health_bars):
+            draw_health_bar(
+                painter,
+                hero_health,
+                corner,
+                HERO_SILVER,
+                hero_name,
+            )
+            corner = corner - Vec2(0.0, HEALTH_BAR_HEIGHT + COUNTER_GAP)
         if health is not None and bar is not None:
             label, color = bar
             draw_health_bar(painter, health, corner, color, label)
@@ -230,18 +247,6 @@ def _float_above_everything(widget: QWidget) -> None:
     )
 
 
-def _hide_dock_icon() -> None:
-    if sys.platform != "darwin":
-        return
-    try:
-        import AppKit
-    except ImportError:
-        return
-    AppKit.NSApplication.sharedApplication().setActivationPolicy_(
-        AppKit.NSApplicationActivationPolicyAccessory
-    )
-
-
 def _goblin_icon() -> QIcon:
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -265,12 +270,18 @@ class DesktopPet(QObject):
         super().__init__()
         self.app = app
         screen = app.primaryScreen()
+        self.settings = QSettings()
         self.session = DesktopSession(
-            _rect(screen.geometry()), _rect(screen.availableGeometry()), source
+            _rect(screen.geometry()),
+            _rect(screen.availableGeometry()),
+            source,
+            defenders=load_defenders(self.settings),
         )
         self.overlay = DesktopOverlay(self.session, screen)
+        self.defender_menu = DefenderMenu(self.session, self.settings)
         self.overlay.show_terrain = show_terrain
         self.paused = False
+        self._activation_menu_ready = False
         self._reported_error: str | None = None
 
         self._last = time.perf_counter()
@@ -283,11 +294,13 @@ class DesktopPet(QObject):
         self.poll_timer.timeout.connect(self._poll)
 
         self.tray = self._make_tray()
+        self.app.installEventFilter(self)
 
     def start(self) -> None:
         self.overlay.show()
         self.frame_timer.start(FRAME_MS)
         self.poll_timer.start(POLL_FAST_MS)
+        QTimer.singleShot(750, self._arm_activation_menu)
 
     # ----- controls ------------------------------------------------------------
 
@@ -296,6 +309,8 @@ class DesktopPet(QObject):
             print("No menu bar tray available; press Ctrl+C in this terminal to quit.")
             return None
         menu = QMenu()
+        self._action(menu, "Defenders…", self.show_defender_menu)
+        menu.addSeparator()
         self.pause_action = self._action(menu, "Pause", self.set_paused, checkable=True)
         self.hide_action = self._action(menu, "Hide", self.set_hidden, checkable=True)
         self.terrain_action = self._action(
@@ -307,12 +322,18 @@ class DesktopPet(QObject):
         )
         self.kills_action.setChecked(self.overlay.show_kills)
         self._action(menu, "Spawn a stickman now", lambda: self.session.spawn_at_edge())
+        self._action(
+            menu,
+            "Spawn Dio",
+            lambda: self.session.spawn_at_edge(variant="hero_fighter"),
+        )
         self._action(menu, "Next monster now", lambda: self.session.rotate())
         menu.addSeparator()
         self._action(menu, "Quit Dungeons & Desktops", self.app.quit)
         tray = QSystemTrayIcon(_goblin_icon(), self)
         tray.setToolTip("Dungeons & Desktops")
         tray.setContextMenu(menu)
+        tray.activated.connect(self._tray_activated)
         tray.show()
         self._menu = menu
         return tray
@@ -324,6 +345,29 @@ class DesktopPet(QObject):
         action.triggered.connect(slot)
         menu.addAction(action)
         return action
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if (
+            watched is self.app
+            and event.type() is QEvent.Type.ApplicationActivate
+            and self._activation_menu_ready
+            and not self.defender_menu.isVisible()
+        ):
+            QTimer.singleShot(0, self.show_defender_menu)
+        return super().eventFilter(watched, event)
+
+    def _arm_activation_menu(self) -> None:
+        self._activation_menu_ready = True
+
+    def _tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason is QSystemTrayIcon.ActivationReason.Trigger:
+            self.show_defender_menu()
+
+    def show_defender_menu(self) -> None:
+        self.defender_menu.sync()
+        self.defender_menu.show()
+        self.defender_menu.raise_()
+        self.defender_menu.activateWindow()
 
     def set_paused(self, paused: bool) -> None:
         self.paused = paused
@@ -375,9 +419,9 @@ def _window_source(app: QApplication, mock: bool) -> tuple[WindowSource, bool]:
 
 def run_desktop(quit_after: float | None = None, mock: bool = False) -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
+    app.setOrganizationName("Dungeons & Desktops")
+    app.setApplicationName("Dungeons & Desktops")
     app.setQuitOnLastWindowClosed(False)
-    if not mock:
-        _hide_dock_icon()
     source, show_terrain = _window_source(app, mock)
     pet = DesktopPet(app, source, show_terrain)
     pet.start()

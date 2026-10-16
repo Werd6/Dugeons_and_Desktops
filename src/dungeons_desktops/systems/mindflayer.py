@@ -240,7 +240,12 @@ class MindFlayer(Floater, Mortal):
         close = [
             s
             for s in self.world.stickmen
-            if s.prey and not s.paralysed and s.center().distance_to(center) <= PULSE_RADIUS
+            if (
+                s.prey
+                and not s.paralysed
+                and not getattr(s, "mindflayer_stun_immune", False)
+                and s.center().distance_to(center) <= PULSE_RADIUS
+            )
         ]
         if target is not None and target.paralysed and target.animated:
             if self._within(target, GRAB_REACH, GRAB_HEIGHT):
@@ -253,6 +258,7 @@ class MindFlayer(Floater, Mortal):
         if (
             target is not None
             and not target.paralysed
+            and not getattr(target, "mindflayer_stun_immune", False)
             and self.blast_cooldown <= 0.0
             and target.center().distance_to(center) <= BLAST_RANGE
         ):
@@ -278,7 +284,11 @@ class MindFlayer(Floater, Mortal):
                 center = self.center()
                 self.waves.append(Wave(center))
                 for stickman in self.world.stickmen:
-                    if stickman.prey and stickman.center().distance_to(center) <= PULSE_RADIUS:
+                    if (
+                        stickman.prey
+                        and not getattr(stickman, "mindflayer_stun_immune", False)
+                        and stickman.center().distance_to(center) <= PULSE_RADIUS
+                    ):
                         stickman.knock_down(center, PULSE_SPEED, PULSE_DOWN, PULSE_STUN)
                 self.pulse_cooldown = PULSE_COOLDOWN
                 self.power = None
@@ -322,12 +332,19 @@ class MindFlayer(Floater, Mortal):
         self.world.spells.sparkle(point, "magic", 10, 110.0)
         if BLAST_DAMAGE:
             push = (target.center() - point).normalized() * 60.0
-            killed = target.hurt(
-                BLAST_DAMAGE, point, push, "mind flayer", "Mind-blasted by the mind flayer!", False
+            killed = target.hurt_from(
+                self,
+                BLAST_DAMAGE,
+                point,
+                push,
+                "mind flayer",
+                "Mind-blasted by the mind flayer!",
+                False,
             )
             if killed:
                 return
-        target.paralyze(BLAST_STUN)
+        if not getattr(target, "mindflayer_stun_immune", False):
+            target.paralyze(BLAST_STUN)
 
     def _update_waves(self, dt: float) -> None:
         for wave in self.waves:

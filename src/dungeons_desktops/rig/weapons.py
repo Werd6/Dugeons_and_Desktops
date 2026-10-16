@@ -12,7 +12,7 @@ facing. That keeps it in hand through pose blends.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
 from dungeons_desktops.rig.biped import BipedLayout
@@ -524,6 +524,17 @@ class Rifle(Weapon):
 # ----- adventurer classes ----------------------------------------------------------
 
 
+class FighterSword(Sword):
+    """The existing sword chop played twice as fast, including its hit and trail."""
+
+    duration = Sword.duration / 2
+    hit_time = Sword.hit_time / 2
+    trail_window = tuple(t / 2 for t in Sword.trail_window)
+    WINDUP = replace(Sword.WINDUP, time=Sword.WINDUP.time / 2)
+    STRIKE = replace(Sword.STRIKE, time=Sword.STRIKE.time / 2)
+    FOLLOW = replace(Sword.FOLLOW, time=Sword.FOLLOW.time / 2)
+
+
 class Axe(Sword):
     """A barbarian's war axe: the sword's overhead chop with a long haft and a heavy
     bit on its leading edge."""
@@ -664,6 +675,178 @@ class HammerAndShield(Sword):
         ]
 
 
+class HeroTridentAndShield(HammerAndShield):
+    """A hero's silver divine-energy trident and dark full-plate shield.
+
+    It shares the established one-handed melee and shield arm rig. Layered strokes
+    give the trident a broad glow, a silver body, and a white-hot center without
+    introducing a separate effect system.
+    """
+
+    name = "divine trident and shield"
+    size = 1.75
+    duration = 0.65
+    haft = 24.0
+    GUARD = Vec2(0.58, 0.58)
+    REST_ANGLE = -1.12
+
+    def __init__(self, layout: BipedLayout) -> None:
+        super().__init__(layout)
+        self.haft = HeroTridentAndShield.haft * self.unit
+        self.blade = self.haft + 2.5 * self.unit
+        self.dio_action: str | None = None
+        self.dio_progress = 0.0
+        self.dio_aim = 0.0
+        self.trident_visible = True
+        self.trident_scale = 1.0
+
+    def set_dio_action(self, action: str, progress: float, aim: float = 0.0) -> None:
+        self.dio_action = action
+        self.dio_progress = clamp(progress, 0.0, 1.0)
+        self.dio_aim = aim
+        self.trident_scale = (
+            1.0 + 0.65 * smoothstep(self.dio_progress) if action == "throw" else 1.0
+        )
+
+    def clear_dio_action(self) -> None:
+        self.dio_action = None
+        self.dio_progress = 0.0
+        self.dio_aim = 0.0
+        self.trident_scale = 1.0
+
+    def _hold(self, pose: Pose, skip: frozenset[str]) -> None:
+        if self.dio_action is not None:
+            self._dio_hold(pose, skip)
+            return
+        if self.time is not None:
+            super()._hold(pose, skip)
+            return
+        transforms = forward_kinematics(self.layout.skeleton, pose)
+        forearm = transforms[self.hand_chain.bones[-1]]
+        self.angle = forearm.angle + math.pi + math.radians(120.0)
+
+    def _dio_hold(self, pose: Pose, skip: frozenset[str]) -> None:
+        """Pose both hands for Dio's hero-only actions without using Sword's timer."""
+        action = self.dio_action
+        t = smoothstep(self.dio_progress)
+        main = Vec2(0.35, 0.18)
+        support = self.GUARD
+        angle = self.REST_ANGLE
+        torso = 0.0
+        if action == "throw":
+            main = Vec2(-0.42, -0.58).lerp(Vec2(0.88, -0.18), t)
+            angle = -2.25 + (self.dio_aim + 2.25) * t
+            torso = -0.22 + 0.5 * t
+        elif action == "mark":
+            main = Vec2(0.08, -0.88)
+            support = Vec2(-0.18, -0.72)
+            angle = -math.pi / 2
+            torso = -0.12 * math.sin(math.pi * t)
+        elif action == "trident_slice":
+            swing = math.sin(math.pi * t)
+            main = Vec2(-0.20 + 0.98 * t, -0.62 + 0.92 * t)
+            angle = -2.35 + 3.25 * t
+            torso = 0.28 * swing
+        elif action == "shield_slice":
+            swing = math.sin(math.pi * t)
+            main = Vec2(0.18, -0.35)
+            support = Vec2(0.42, 0.30).lerp(Vec2(1.0, 0.02), swing)
+            angle = -1.35
+            torso = 0.22 * swing
+        elif action == "marked":
+            thrust = math.sin(math.pi * t)
+            main = Vec2(0.34, 0.05).lerp(Vec2(0.98, 0.02), thrust)
+            angle = -0.06
+            torso = 0.2 * thrust
+        pose.angles[self.layout.torso] += torso
+        shoulder = self._shoulder(pose)
+        targets = {
+            self.hand_chain.name: shoulder + main * self.arm_length,
+            self.support_chain.name: shoulder + support * self.arm_length,
+        }
+        self._solve(pose, targets, skip)
+        self.angle = angle
+
+    def _hammer(self, butt: Vec2, direction: Vec2, scale: float = 1.0) -> list[Stroke]:
+        """Draw the trident through the hook used by the shared shield rig."""
+        s = self.unit * scale
+        crown = butt + direction * (self.haft * scale)
+        across = direction.rotated(math.pi / 2)
+        side_root = crown - direction * (1.5 * s)
+        left = crown + direction * (4.0 * s) + across * (3.2 * s)
+        right = crown + direction * (4.0 * s) - across * (3.2 * s)
+        center = crown + direction * (6.0 * s)
+        lines = (
+            (butt, crown),
+            (side_root, crown + across * (3.2 * s)),
+            (side_root, crown - across * (3.2 * s)),
+            (crown + across * (3.2 * s), left),
+            (crown - across * (3.2 * s), right),
+            (crown, center),
+        )
+        return [
+            *[Stroke(a, b, 2.3 * s, "divine_glow") for a, b in lines],
+            *[Stroke(a, b, 1.0 * s, "divine") for a, b in lines],
+            *[Stroke(a, b, 0.25 * s, "divine_core") for a, b in lines],
+        ]
+
+    def trident_center(self, transforms: dict[str, BoneTransform], facing: int) -> Vec2:
+        """The shaft midpoint held in Dio's weapon hand."""
+        return transforms[self.hand_chain.bones[-1]].end
+
+    def trident_strokes(
+        self, center: Vec2, direction: Vec2, scale: float = 1.0
+    ) -> list[Stroke]:
+        butt = center - direction * (self.haft * scale * 0.5)
+        return self._hammer(butt, direction, scale)
+
+    def strokes(
+        self, transforms: dict[str, BoneTransform], facing: int, slung: bool = False
+    ) -> list[Stroke]:
+        if slung or not self.held:
+            return super().strokes(transforms, facing, slung)
+        s = self.unit
+        grip = transforms[self.hand_chain.bones[-1]].end
+        direction = Vec2.from_angle(_world_angle(self.angle, facing))
+        shield_hand = transforms[self.support_chain.bones[-1]].end
+        shield_center = shield_hand + Vec2(facing * 5.4 * s, -3.2 * s)
+        trident = (
+            self.trident_strokes(grip, direction, self.trident_scale)
+            if self.trident_visible
+            else []
+        )
+        return [*trident, *self._shield(shield_center)]
+
+    def _shield(self, center: Vec2) -> list[Stroke]:
+        s = self.unit
+        outline = (
+            Vec2(-5.3 * s, -5.2 * s),
+            Vec2(5.3 * s, -5.2 * s),
+            Vec2(5.0 * s, 1.7 * s),
+            Vec2(0.0, 8.1 * s),
+            Vec2(-5.0 * s, 1.7 * s),
+        )
+        rim = tuple(center + point for point in outline)
+        face = tuple(center + point * 0.78 + Vec2(0.0, -0.2 * s) for point in outline)
+        return [
+            Stroke(center, center, 0.8 * s, "hero_shield_trim", rim),
+            Stroke(center, center, 0.2 * s, "hero_shield", face),
+            Stroke(
+                center + Vec2(-2.7 * s, -1.8 * s),
+                center + Vec2(2.7 * s, -1.8 * s),
+                1.3 * s,
+                "hero_shield_strap",
+            ),
+            Stroke(
+                center + Vec2(-2.4 * s, 1.4 * s),
+                center + Vec2(2.4 * s, 1.4 * s),
+                1.3 * s,
+                "hero_shield_strap",
+            ),
+            Stroke(center, center, 2.1 * s, "hero_shield_trim"),
+        ]
+
+
 class Daggers(Weapon):
     """A rogue's pair of daggers, held low and forward in a knife-fighter's guard; the
     attack is a quick stab with the right and then the left."""
@@ -776,6 +959,7 @@ class Wand(_Released):
     then thrusts it along `aim` and looses the spell at full stretch."""
 
     name = "wand"
+    missile_kind = "magic"
     size = 1.9
     duration = 0.7
     release_time = 0.3
@@ -831,6 +1015,52 @@ class Wand(_Released):
         low, high = self._back_line(transforms, facing, 2.0 * s, 0.0)
         along = (high - low).normalized()
         return [Stroke(low, low + along * self.length, 1.3 * s, "wood")]
+
+
+class FireOrb(Wand):
+    """A sorcerer's floating focus, using the wand's aiming and release timeline."""
+
+    name = "fire orb"
+    missile_kind = "fire"
+    hover = 12.0
+    radius = 5.0
+
+    def __init__(self, layout: BipedLayout) -> None:
+        super().__init__(layout)
+        self.clock = 0.0
+
+    def apply(self, pose: Pose, mode: PoseMode, dt: float, skip: frozenset[str]) -> None:
+        self.clock += dt
+        super().apply(pose, mode, dt, skip)
+
+    def _hold(self, pose: Pose, skip: frozenset[str]) -> None:
+        if self.time is not None:
+            super()._hold(pose, skip)
+            return
+        shoulder = self._shoulder(pose)
+        palm = shoulder + Vec2(0.8, 0.3) * self.arm_length
+        self._solve(pose, {self.hand_chain.name: palm}, skip)
+
+    def _center(self, grip: Vec2) -> Vec2:
+        bob = math.sin(self.clock * 3.0) * 1.5
+        return grip + Vec2(0.0, (-self.hover + bob) * self.scale)
+
+    def tip(self, transforms: dict[str, BoneTransform], facing: int) -> Vec2:
+        return self._center(transforms[self.hand_chain.bones[-1]].end)
+
+    def _held(self, grip: Vec2, direction: Vec2, facing: int) -> list[Stroke]:
+        center = self._center(grip)
+        radius = self.radius * self.scale
+        strokes = []
+        for size, kind in ((1.0, "orb"), (0.55, "flash")):
+            ring = tuple(
+                center + Vec2.from_angle(math.tau * k / 16, radius * size) for k in range(16)
+            )
+            strokes.append(Stroke(center, center, 0.5 * self.scale, kind, ring))
+        return strokes
+
+    def _slung(self, transforms: dict[str, BoneTransform], facing: int) -> list[Stroke]:
+        return []
 
 
 class Bow(_Released):

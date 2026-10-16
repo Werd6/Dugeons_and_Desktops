@@ -167,6 +167,11 @@ class Wave:
                 if not _hurt(world, "water", stickman, SURGE_DAMAGE, contact, push):
                     behind = Vec2(contact.x - self.direction * 30.0, contact.y + 6.0)
                     stickman.knock_down(behind, SURGE_FLING, SURGE_DOWN, SURGE_STUN)
+        for stickman in self.swept:
+            if stickman.ragdoll is not None and not stickman.animated:
+                center = stickman.center()
+                carried = Vec2(front - self.direction * 5.0, self.y - 14.0)
+                stickman.ragdoll.carry(carried - center, Vec2(self.direction * SURGE_SPEED, 0.0))
         edge = self.high if self.direction > 0 else self.low
         return self.travelled < SURGE_REACH and (edge - self.x) * self.direction > -6.0
 
@@ -242,10 +247,17 @@ class Caught:
     stickman: Stickman
     direction: Vec2
     age: float = 0.0
+    position: Vec2 | None = None
 
     def update(self, world: SimWorld, dt: float) -> bool:
         self.age += dt
         if self.age < WHIRL_CARRY:
+            if self.position is None:
+                self.position = self.stickman.center()
+            self.position += self.direction * (WHIRL_SPEED * dt)
+            ragdoll = self.stickman.ragdoll
+            if ragdoll is not None:
+                ragdoll.carry(self.position - self.stickman.center(), self.direction * WHIRL_SPEED)
             return True
         ragdoll = self.stickman.ragdoll
         if ragdoll is not None:

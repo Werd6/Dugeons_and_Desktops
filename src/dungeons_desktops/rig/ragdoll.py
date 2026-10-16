@@ -111,6 +111,13 @@ class Ragdoll:
             if falloff > 0.0:
                 self._prev[i] -= velocity * (self._last_dt * falloff)
 
+    def carry(self, offset: Vec2, velocity: Vec2) -> None:
+        """Move a carried body intact and give it the carrier's release velocity."""
+        if self.motors_on:
+            return
+        self._pos = [point + offset for point in self._pos]
+        self._prev = [point - velocity * self._last_dt for point in self._pos]
+
     def step(self, dt: float) -> None:
         if self.motors_on:
             return

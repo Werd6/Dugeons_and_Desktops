@@ -272,8 +272,13 @@ class Devourer(Mortal):
         if not target.hits(self.center(), BITE_MARGIN):
             return
         push = Vec2(self.facing * 120.0, -60.0)
-        target.hurt(
-            DEVOURER_DAMAGE, self.center(), push, "devourer", "Devoured by an intellect devourer!"
+        target.hurt_from(
+            self,
+            DEVOURER_DAMAGE,
+            self.center(),
+            push,
+            "devourer",
+            "Devoured by an intellect devourer!",
         )
         self.bite_wait = BITE_COOLDOWN
         away = 1 if self.center().x >= target.center().x else -1

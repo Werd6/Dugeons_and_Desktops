@@ -126,5 +126,12 @@ class Skeleton(Goblin):
         if target is not None and self._in_reach(target, slack=SWORD_STRIKE_REACH):
             push = Vec2(self.facing * SWORD_PUSH, -SWORD_PUSH * 0.5)
             point = self._blade_point(target.center())
-            if target.hurt(SKELETON_DAMAGE, point, push, "skeleton", "Hacked down by a skeleton!"):
+            if target.hurt_from(
+                self,
+                SKELETON_DAMAGE,
+                point,
+                push,
+                "skeleton",
+                "Hacked down by a skeleton!",
+            ):
                 self.kills += 1
