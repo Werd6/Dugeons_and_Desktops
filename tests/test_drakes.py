@@ -1,8 +1,8 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DEFENDERS, DRAKE_PACK, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.drakes import (
+from dungeons_desktops.game.actors.mortal import DRAKE_HP, KOBOLD_HP
+from dungeons_desktops.game.defenders.drakes.drake import (
     ARROW_DAMAGE,
     BITE_DAMAGE,
     BOLT_COOLDOWN,
@@ -20,8 +20,8 @@ from dungeons_desktops.systems.drakes import (
     Missile,
     lobbed,
 )
-from dungeons_desktops.systems.mortal import DRAKE_HP, KOBOLD_HP
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.terrain import TerrainChange
 
 STEP = 1 / 60
 

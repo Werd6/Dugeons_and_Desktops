@@ -6,11 +6,9 @@ from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.overlay import DEFENDER_BARS
 from dungeons_desktops.desktop.session import DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.planner import Anchor
-from dungeons_desktops.navigation.terrain import SurfaceKind, TerrainChange
-from dungeons_desktops.render.mimic import draw_lure_alert, draw_mimic
-from dungeons_desktops.systems.actors import LURE_HASTE, Stickman
-from dungeons_desktops.systems.mimic import (
+from dungeons_desktops.game.actors.mortal import MIMIC_HP
+from dungeons_desktops.game.adventurers.actor import LURE_HASTE, Stickman
+from dungeons_desktops.game.defenders.mimic.actor import (
     APPROACH,
     CAMO_COOLDOWN,
     CHOMP_AT,
@@ -35,9 +33,11 @@ from dungeons_desktops.systems.mimic import (
     Mode,
     Toss,
 )
-from dungeons_desktops.systems.mimic_legs import MAX_STEPPING, REACH
-from dungeons_desktops.systems.mortal import MIMIC_HP
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.defenders.mimic.legs import MAX_STEPPING, REACH
+from dungeons_desktops.game.defenders.mimic.render import draw_lure_alert, draw_mimic
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.planner import Anchor
+from dungeons_desktops.navigation.terrain import SurfaceKind, TerrainChange
 
 STEP = 1 / 60
 FLOOR = 700.0

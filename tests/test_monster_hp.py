@@ -5,16 +5,16 @@ import pytest
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource
-from dungeons_desktops.systems.dragon import LYING_HEIGHT, DragonMode
-from dungeons_desktops.systems.goblins import PACK
-from dungeons_desktops.systems.mortal import (
+from dungeons_desktops.game.actors.mortal import (
     DRAGON_HP,
     FADE_TIME,
     GOBLIN_HP,
     WORM_HP,
 )
-from dungeons_desktops.systems.world import SimWorld
-from dungeons_desktops.systems.worm import WormMode
+from dungeons_desktops.game.defenders.dragon.actor import LYING_HEIGHT, DragonMode
+from dungeons_desktops.game.defenders.goblins.actor import PACK
+from dungeons_desktops.game.defenders.worm.actor import WormMode
+from dungeons_desktops.game.world.simulation import SimWorld
 
 DT = 1.0 / 60.0
 FLOOR = 700.0

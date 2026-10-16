@@ -1,17 +1,17 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.creatures.stick_figure import BASE_HP
-from dungeons_desktops.preview.controller import RigPreviewController
-from dungeons_desktops.rig.locomotion import PoseMode
-from dungeons_desktops.rig.weapons import GoblinSword
-from dungeons_desktops.systems.actors import GOBLIN_DAMAGE, StickMode
-from dungeons_desktops.systems.goblins import (
+from dungeons_desktops.game.adventurers.actor import GOBLIN_DAMAGE, StickMode
+from dungeons_desktops.game.adventurers.alchemy import GRAVITY, lob_velocity
+from dungeons_desktops.game.adventurers.model import BASE_HP
+from dungeons_desktops.game.defenders.goblins.actor import (
     REGROUP_BOOST,
     SPEAR_MAX_ARC,
     SWORD_START_REACH,
     Goblin,
 )
-from dungeons_desktops.systems.vials import GRAVITY, lob_velocity
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.preview.controller import RigPreviewController
+from dungeons_desktops.rig.locomotion import PoseMode
+from dungeons_desktops.rig.weapons import GoblinSword
 
 DT = 1.0 / 60.0
 

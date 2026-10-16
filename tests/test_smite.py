@@ -1,6 +1,6 @@
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.systems.mortal import LICH_HP
-from dungeons_desktops.systems.necromancy import (
+from dungeons_desktops.game.actors.mortal import LICH_HP
+from dungeons_desktops.game.defenders.lich.spells import (
     SMITE_DAMAGE,
     SMITE_DROP,
     SMITE_HANG,
@@ -8,7 +8,7 @@ from dungeons_desktops.systems.necromancy import (
     SMITE_STAGGER,
     WORD_DELAY,
 )
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
 
 STEP = 1 / 60
 FLOOR = 700.0

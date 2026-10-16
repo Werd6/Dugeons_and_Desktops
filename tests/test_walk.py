@@ -1,7 +1,7 @@
 import pytest
 
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.creatures.stick_figure import build_stick_figure
+from dungeons_desktops.game.adventurers.model import build_stick_figure
 from dungeons_desktops.rig.skeleton import forward_kinematics
 from dungeons_desktops.rig.walk import WalkDriver
 

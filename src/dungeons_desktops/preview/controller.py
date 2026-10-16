@@ -9,14 +9,14 @@ somewhere else. Dragging a box rebuilds the terrain and every actor re-anchors.
 from __future__ import annotations
 
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.creatures import stick_figure
+from dungeons_desktops.game.adventurers import model as stick_figure
+from dungeons_desktops.game.adventurers.actor import Actor
+from dungeons_desktops.game.defenders.elementals.actor import KINDS
+from dungeons_desktops.game.defenders.goblins.actor import Goblin
+from dungeons_desktops.game.effects.breath import BREATHS, VARIANTS
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import RouteStep
 from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.actors import Actor
-from dungeons_desktops.systems.breath import BREATHS, VARIANTS
-from dungeons_desktops.systems.elementals import KINDS
-from dungeons_desktops.systems.goblins import Goblin
-from dungeons_desktops.systems.world import SimWorld
 
 GRAB_RADIUS = 6.0
 RAGDOLL_KICK_REACH = 12.0

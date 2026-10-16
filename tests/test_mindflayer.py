@@ -5,10 +5,8 @@ import pytest
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.planner import Move
-from dungeons_desktops.rig.biped import UP
-from dungeons_desktops.systems.devourer import DEVOURER_DAMAGE, Devourer
-from dungeons_desktops.systems.mindflayer import (
+from dungeons_desktops.game.actors.mortal import DEVOURER_HP, FADE_TIME, MIND_FLAYER_HP
+from dungeons_desktops.game.defenders.mindflayer.actor import (
     BLAST_DAMAGE,
     CEILING_GAP,
     GRAB_TIME,
@@ -21,7 +19,9 @@ from dungeons_desktops.systems.mindflayer import (
     Bolt,
     Power,
 )
-from dungeons_desktops.systems.mortal import DEVOURER_HP, FADE_TIME, MIND_FLAYER_HP
+from dungeons_desktops.game.defenders.mindflayer.devourer import DEVOURER_DAMAGE, Devourer
+from dungeons_desktops.navigation.planner import Move
+from dungeons_desktops.rig.biped import UP
 
 STEP = 1 / 60
 FLOOR = 700.0
@@ -31,7 +31,7 @@ LOW_WINDOW = Rect(300, 420, 300, 256)
 
 
 def world_with(boxes=(WINDOW,), seed=4):
-    from dungeons_desktops.systems.world import SimWorld
+    from dungeons_desktops.game.world.simulation import SimWorld
 
     return SimWorld(list(boxes), FLOOR, 1000.0, ceiling=20.0, seed=seed)
 

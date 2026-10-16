@@ -5,10 +5,9 @@ import pytest
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.planner import Anchor
-from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.dragon import climbing_wall
-from dungeons_desktops.systems.hydra import (
+from dungeons_desktops.game.actors.mortal import HYDRA_HP
+from dungeons_desktops.game.defenders.dragon.actor import climbing_wall
+from dungeons_desktops.game.defenders.hydra.actor import (
     ACID_DAMAGE,
     ATTACK_COOLDOWN,
     ATTACK_GAP,
@@ -36,8 +35,9 @@ from dungeons_desktops.systems.hydra import (
     Hydra,
     Mode,
 )
-from dungeons_desktops.systems.mortal import HYDRA_HP
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.planner import Anchor
+from dungeons_desktops.navigation.terrain import TerrainChange
 
 STEP = 1 / 60
 FLOOR = 700.0

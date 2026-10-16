@@ -1,11 +1,11 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.systems.goblins import Goblin
-from dungeons_desktops.systems.mortal import LICH_HP
-from dungeons_desktops.systems.necromancy import RISE_DELAY, WORD_DELAY
-from dungeons_desktops.systems.skeletons import RISE_TIME, SKELETON_CAP, Skeleton
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.actors.mortal import LICH_HP
+from dungeons_desktops.game.defenders.goblins.actor import Goblin
+from dungeons_desktops.game.defenders.lich.skeletons import RISE_TIME, SKELETON_CAP, Skeleton
+from dungeons_desktops.game.defenders.lich.spells import RISE_DELAY, WORD_DELAY
+from dungeons_desktops.game.world.simulation import SimWorld
 
 STEP = 1 / 60
 FLOOR = 700.0

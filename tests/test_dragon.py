@@ -3,12 +3,12 @@ from itertools import pairwise
 import pytest
 
 from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.game.adventurers.actor import StickMode
+from dungeons_desktops.game.defenders.dragon.actor import STANCE, DragonMode, Flame
+from dungeons_desktops.game.effects.fire import BURN_TIME
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.terrain import TerrainChange
 from dungeons_desktops.rig.locomotion import PoseMode
-from dungeons_desktops.systems.actors import StickMode
-from dungeons_desktops.systems.dragon import STANCE, DragonMode, Flame
-from dungeons_desktops.systems.fire import BURN_TIME
-from dungeons_desktops.systems.world import SimWorld
 
 STEP = 1 / 60
 WINDOW = Rect(300, 400, 500, 300)

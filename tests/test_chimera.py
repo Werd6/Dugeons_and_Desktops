@@ -2,13 +2,13 @@ from dungeons_desktops.core.geometry import Rect, Vec2, wrap_angle
 from dungeons_desktops.desktop.overlay import DEFENDER_BARS
 from dungeons_desktops.desktop.session import DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
+from dungeons_desktops.game.actors.mortal import CHIMERA_HP
+from dungeons_desktops.game.defenders.chimera.actor import Chimera
+from dungeons_desktops.game.defenders.chimera.goat import FIRE_BURST, FIRE_COOLDOWN, NECK_CONE, Fire
+from dungeons_desktops.game.defenders.chimera.lion import POUNCE_COOLDOWN
+from dungeons_desktops.game.defenders.chimera.snake import BEHIND_RANGE, FRONT_RANGE, Strike
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.terrain import SurfaceKind, TerrainChange
-from dungeons_desktops.systems.chimera import Chimera
-from dungeons_desktops.systems.chimera_goat import FIRE_BURST, FIRE_COOLDOWN, NECK_CONE, Fire
-from dungeons_desktops.systems.chimera_lion import POUNCE_COOLDOWN
-from dungeons_desktops.systems.chimera_snake import BEHIND_RANGE, FRONT_RANGE, Strike
-from dungeons_desktops.systems.mortal import CHIMERA_HP
-from dungeons_desktops.systems.world import SimWorld
 
 STEP = 1 / 60
 WINDOW = Rect(300, 300, 400, 200)

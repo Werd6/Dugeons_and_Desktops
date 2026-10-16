@@ -25,47 +25,9 @@ from PySide6.QtGui import (
 )
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp, smoothstep
-from dungeons_desktops.navigation.terrain import Surface
-from dungeons_desktops.render.breath import (
-    demise_colors,
-    draw_breath,
-    draw_demise_over,
-    draw_demise_under,
-    melted,
-)
-from dungeons_desktops.render.displacer import draw_displacer
-from dungeons_desktops.render.hydra import draw_hydra
-from dungeons_desktops.render.lich import draw_lich
-from dungeons_desktops.render.mimic import draw_lure_alert, draw_mimic
-from dungeons_desktops.render.minotaur import draw_minotaur
-from dungeons_desktops.rig.ik import two_bone_points
-from dungeons_desktops.rig.skeleton import BoneTransform
-from dungeons_desktops.rig.weapons import Banner, HeroTridentAndShield
-from dungeons_desktops.systems.actors import Actor, Stickman
-from dungeons_desktops.systems.chimera import Chimera
-from dungeons_desktops.systems.debris import HOLE_FADE, HOLE_LIFE, Debris, Hole
-from dungeons_desktops.systems.devourer import BODY_HEIGHT, Devourer
-from dungeons_desktops.systems.displacer import Displacer
-from dungeons_desktops.systems.dragon import SCALE as DRAGON_SCALE
-from dungeons_desktops.systems.dragon import Dragon, Leg
-from dungeons_desktops.systems.drakes import Drake
-from dungeons_desktops.systems.drow import Drow, Lizard
-from dungeons_desktops.systems.elementals import Elemental
-from dungeons_desktops.systems.fire import Burn
-from dungeons_desktops.systems.flames import FLAME_LIFE, Flame
-from dungeons_desktops.systems.goblins import Goblin
-from dungeons_desktops.systems.gore import DROP_LIFE, SPLAT_LIFE, Gore
-from dungeons_desktops.systems.hydra import Hydra
-from dungeons_desktops.systems.kobolds import Kobold
-from dungeons_desktops.systems.lich import Lich
-from dungeons_desktops.systems.mimic import Mimic
-from dungeons_desktops.systems.mindflayer import PULSE_RADIUS, WAVE_TIME, MindFlayer, Power
-from dungeons_desktops.systems.minotaur import Minotaur
-from dungeons_desktops.systems.ooze import Ooze
-from dungeons_desktops.systems.projectiles import Projectiles
-from dungeons_desktops.systems.skeletons import Skeleton
-from dungeons_desktops.systems.spears import Spears
-from dungeons_desktops.systems.spells import (
+from dungeons_desktops.game.adventurers.actor import Actor, Stickman
+from dungeons_desktops.game.adventurers.alchemy import Vials
+from dungeons_desktops.game.adventurers.spells import (
     ARROW_STUCK_TIME,
     PULSE_TIME,
     SPARK_LIFE,
@@ -73,9 +35,52 @@ from dungeons_desktops.systems.spells import (
     VINE_TIME,
     Spells,
 )
-from dungeons_desktops.systems.vials import Vials
-from dungeons_desktops.systems.world import KILL_MARK_TIME, KillMark
-from dungeons_desktops.systems.worm import Worm
+from dungeons_desktops.game.defenders.chimera.actor import Chimera
+from dungeons_desktops.game.defenders.displacer.actor import Displacer
+from dungeons_desktops.game.defenders.displacer.render import draw_displacer
+from dungeons_desktops.game.defenders.dragon.actor import SCALE as DRAGON_SCALE
+from dungeons_desktops.game.defenders.dragon.actor import Dragon, Leg
+from dungeons_desktops.game.defenders.drakes.drake import Drake
+from dungeons_desktops.game.defenders.drakes.kobold import Kobold
+from dungeons_desktops.game.defenders.drow.actor import Drow, Lizard
+from dungeons_desktops.game.defenders.elementals.actor import Elemental
+from dungeons_desktops.game.defenders.goblins.actor import Goblin
+from dungeons_desktops.game.defenders.goblins.spears import Spears
+from dungeons_desktops.game.defenders.hydra.actor import Hydra
+from dungeons_desktops.game.defenders.hydra.render import draw_hydra
+from dungeons_desktops.game.defenders.lich.actor import Lich
+from dungeons_desktops.game.defenders.lich.render import draw_lich
+from dungeons_desktops.game.defenders.lich.skeletons import Skeleton
+from dungeons_desktops.game.defenders.mimic.actor import Mimic
+from dungeons_desktops.game.defenders.mimic.render import draw_lure_alert, draw_mimic
+from dungeons_desktops.game.defenders.mindflayer.actor import (
+    PULSE_RADIUS,
+    WAVE_TIME,
+    MindFlayer,
+    Power,
+)
+from dungeons_desktops.game.defenders.mindflayer.devourer import BODY_HEIGHT, Devourer
+from dungeons_desktops.game.defenders.minotaur.actor import Minotaur
+from dungeons_desktops.game.defenders.minotaur.render import draw_minotaur
+from dungeons_desktops.game.defenders.ooze.actor import Ooze
+from dungeons_desktops.game.defenders.worm.actor import Worm
+from dungeons_desktops.game.effects.debris import HOLE_FADE, HOLE_LIFE, Debris, Hole
+from dungeons_desktops.game.effects.fire import Burn
+from dungeons_desktops.game.effects.flames import FLAME_LIFE, Flame
+from dungeons_desktops.game.effects.gore import DROP_LIFE, SPLAT_LIFE, Gore
+from dungeons_desktops.game.effects.projectiles import Projectiles
+from dungeons_desktops.game.effects.render import (
+    demise_colors,
+    draw_breath,
+    draw_demise_over,
+    draw_demise_under,
+    melted,
+)
+from dungeons_desktops.game.world.simulation import KILL_MARK_TIME, KillMark
+from dungeons_desktops.navigation.terrain import Surface
+from dungeons_desktops.rig.ik import two_bone_points
+from dungeons_desktops.rig.skeleton import BoneTransform
+from dungeons_desktops.rig.weapons import Banner, HeroTridentAndShield
 
 BACKGROUND = QColor(24, 26, 33)
 KILL_MARK_TEXT = "+\N{SKULL}"
@@ -1768,20 +1773,20 @@ def draw_fallen(
         if isinstance(body, Skeleton):
             draw_skeleton(painter, body, outline)
         elif isinstance(body, Drow):
-            from dungeons_desktops.render.drow import draw_drow_on_foot
+            from dungeons_desktops.game.defenders.drow.render import draw_drow_on_foot
 
             draw_drow_on_foot(painter, body, outline)
         elif isinstance(body, Lizard):
-            from dungeons_desktops.render.drow import draw_lizard
+            from dungeons_desktops.game.defenders.drow.render import draw_lizard
 
             draw_lizard(painter, body, outline)
         elif isinstance(body, Chimera):
-            from dungeons_desktops.render.chimera import draw_chimera
+            from dungeons_desktops.game.defenders.chimera.render import draw_chimera
 
             draw_chimera(painter, body, outline)
             draw_fire(painter, body.flames)
         elif isinstance(body, Elemental):
-            from dungeons_desktops.render.elementals import draw_elemental
+            from dungeons_desktops.game.defenders.elementals.render import draw_elemental
 
             draw_elemental(painter, body, outline)
         elif isinstance(body, Goblin):
@@ -1797,7 +1802,7 @@ def draw_fallen(
         elif isinstance(body, Minotaur):
             draw_minotaur(painter, body, outline)
         elif isinstance(body, Ooze):
-            from dungeons_desktops.render.ooze import draw_ooze
+            from dungeons_desktops.game.defenders.ooze.render import draw_ooze
 
             draw_ooze(painter, body, outline)
         elif isinstance(body, Lich):
@@ -1807,11 +1812,11 @@ def draw_fallen(
         elif isinstance(body, Hydra):
             draw_hydra(painter, body, outline)
         elif isinstance(body, Drake):
-            from dungeons_desktops.render.drakes import draw_drake
+            from dungeons_desktops.game.defenders.drakes.render import draw_drake
 
             draw_drake(painter, body, outline)
         elif isinstance(body, Kobold):
-            from dungeons_desktops.render.drakes import draw_kobold
+            from dungeons_desktops.game.defenders.drakes.render import draw_kobold
 
             draw_kobold(painter, body, outline)
         else:

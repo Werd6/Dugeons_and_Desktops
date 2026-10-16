@@ -1,5 +1,5 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
 
 STEP = 1 / 60
 FLOOR = 700.0

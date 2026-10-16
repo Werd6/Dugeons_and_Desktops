@@ -3,9 +3,8 @@ import math
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.planner import Anchor
-from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.displacer import (
+from dungeons_desktops.game.actors.mortal import DISPLACER_HP
+from dungeons_desktops.game.defenders.displacer.actor import (
     BODY_HEIGHT,
     CHEST,
     CLAW_DAMAGE,
@@ -30,8 +29,9 @@ from dungeons_desktops.systems.displacer import (
     TURN_COOLDOWN,
     Displacer,
 )
-from dungeons_desktops.systems.mortal import DISPLACER_HP
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.planner import Anchor
+from dungeons_desktops.navigation.terrain import TerrainChange
 
 STEP = 1 / 60
 FLOOR = 700.0

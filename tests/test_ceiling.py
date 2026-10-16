@@ -3,15 +3,16 @@
 import pytest
 
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.creatures import goblin, stick_figure
+from dungeons_desktops.game.adventurers import model as stick_figure
+from dungeons_desktops.game.adventurers.actor import StickMode
+from dungeons_desktops.game.defenders.goblins import model as goblin
+from dungeons_desktops.game.defenders.goblins.actor import GoblinPack
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import Anchor, Move, Planner
 from dungeons_desktops.navigation.terrain import SurfaceKind, Terrain, TerrainChange
 from dungeons_desktops.rig.hang import HangDriver, hang_depth
 from dungeons_desktops.rig.locomotion import PoseMode
 from dungeons_desktops.rig.skeleton import forward_kinematics
-from dungeons_desktops.systems.actors import StickMode
-from dungeons_desktops.systems.goblins import GoblinPack
-from dungeons_desktops.systems.world import SimWorld
 
 DT = 1.0 / 60.0
 FLOOR, WIDTH, TOP = 600.0, 900.0, 20.0

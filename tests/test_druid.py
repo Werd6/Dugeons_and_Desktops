@@ -1,7 +1,7 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.game.defenders.worm.actor import WormMode
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.rig.weapons import DruidStaff
-from dungeons_desktops.systems.world import SimWorld
-from dungeons_desktops.systems.worm import WormMode
 
 DT = 1.0 / 60.0
 

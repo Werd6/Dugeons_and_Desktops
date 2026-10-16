@@ -5,10 +5,9 @@ import pytest
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.planner import Anchor
-from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.actors import StickMode
-from dungeons_desktops.systems.minotaur import (
+from dungeons_desktops.game.actors.mortal import MINOTAUR_HP
+from dungeons_desktops.game.adventurers.actor import StickMode
+from dungeons_desktops.game.defenders.minotaur.actor import (
     CHARGE_EDGE,
     CRUSH_DAMAGE,
     PUNCH_DAMAGE,
@@ -24,8 +23,9 @@ from dungeons_desktops.systems.minotaur import (
     TRAMPLE_DAMAGE,
     Minotaur,
 )
-from dungeons_desktops.systems.mortal import MINOTAUR_HP
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.planner import Anchor
+from dungeons_desktops.navigation.terrain import TerrainChange
 
 STEP = 1 / 60
 WALL_BLOWS = ("punch", "swipe")

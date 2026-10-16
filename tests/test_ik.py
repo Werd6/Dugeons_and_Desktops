@@ -3,7 +3,7 @@ import math
 import pytest
 
 from dungeons_desktops.core.geometry import Vec2, wrap_angle
-from dungeons_desktops.creatures.stick_figure import build_stick_figure
+from dungeons_desktops.game.adventurers.model import build_stick_figure
 from dungeons_desktops.rig.ik import (
     IkChain,
     chain_tip,

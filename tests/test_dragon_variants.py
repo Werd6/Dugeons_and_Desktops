@@ -3,10 +3,10 @@ import os
 import pytest
 
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.systems.actors import StickMode
-from dungeons_desktops.systems.breath import BREATHS, DEATH_MESSAGES, DEATH_TIME, VARIANTS
-from dungeons_desktops.systems.dragon import Flame
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.adventurers.actor import StickMode
+from dungeons_desktops.game.defenders.dragon.actor import Flame
+from dungeons_desktops.game.effects.breath import BREATHS, DEATH_MESSAGES, DEATH_TIME, VARIANTS
+from dungeons_desktops.game.world.simulation import SimWorld
 
 STEP = 1 / 60
 

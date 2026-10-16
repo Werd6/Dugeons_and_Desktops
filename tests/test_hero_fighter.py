@@ -7,21 +7,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPainter
 
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.creatures.stick_figure import CALLINGS, CLASSES, HEROES
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource
-from dungeons_desktops.preview.controller import RigPreviewController
-from dungeons_desktops.render import draw as render
-from dungeons_desktops.render.draw import (
-    HERO_PLATE,
-    HERO_PLATE_DARK,
-    HERO_SILVER,
-    draw_dio_effects,
-    draw_stickman,
-)
-from dungeons_desktops.rig.locomotion import PoseMode
-from dungeons_desktops.rig.weapons import HeroTridentAndShield
-from dungeons_desktops.systems.heroes import (
+from dungeons_desktops.game.adventurers.model import CALLINGS, CLASSES, HEROES
+from dungeons_desktops.game.defenders.mindflayer.actor import PULSE_WINDUP, Power
+from dungeons_desktops.game.heroes.dio.actor import (
     DIO_AWARENESS_RANGE,
     HERO_FIGHTER_GAIT,
     MARK_DAMAGE,
@@ -40,8 +30,18 @@ from dungeons_desktops.systems.heroes import (
     HeroFighter,
     SpectralShield,
 )
-from dungeons_desktops.systems.mindflayer import PULSE_WINDUP, Power
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.preview.controller import RigPreviewController
+from dungeons_desktops.render import draw as render
+from dungeons_desktops.render.draw import (
+    HERO_PLATE,
+    HERO_PLATE_DARK,
+    HERO_SILVER,
+    draw_dio_effects,
+    draw_stickman,
+)
+from dungeons_desktops.rig.locomotion import PoseMode
+from dungeons_desktops.rig.weapons import HeroTridentAndShield
 
 DT = 1 / 60
 FLOOR = 200.0

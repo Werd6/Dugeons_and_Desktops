@@ -8,9 +8,9 @@ from dungeons_desktops.desktop.session import (
     to_world,
 )
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord, WindowTracker
+from dungeons_desktops.game.adventurers.actor import StickMode
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.navigation.terrain import SurfaceKind
-from dungeons_desktops.systems.actors import StickMode
 
 SCREEN = Rect(0, 0, 1400, 900)
 USABLE = Rect(0, 30, 1400, 800)

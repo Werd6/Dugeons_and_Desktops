@@ -1,6 +1,6 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.rig.locomotion import PoseMode
-from dungeons_desktops.systems.world import SimWorld
 
 DT = 1.0 / 60.0
 

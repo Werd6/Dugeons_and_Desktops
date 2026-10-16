@@ -3,7 +3,7 @@ import copy
 import pytest
 
 from dungeons_desktops.core.geometry import Rect, Vec2, wrap_angle
-from dungeons_desktops.creatures.stick_figure import build_stick_figure
+from dungeons_desktops.game.adventurers.model import build_stick_figure
 from dungeons_desktops.rig.ragdoll import Ragdoll
 from dungeons_desktops.rig.skeleton import forward_kinematics, mirror_pose
 from dungeons_desktops.rig.walk import WalkDriver

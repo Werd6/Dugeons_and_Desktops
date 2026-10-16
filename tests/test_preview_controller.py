@@ -1,8 +1,8 @@
 from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.game.adventurers.actor import StickMode
 from dungeons_desktops.navigation.planner import Move
 from dungeons_desktops.preview.controller import RigPreviewController
 from dungeons_desktops.rig.locomotion import PoseMode
-from dungeons_desktops.systems.actors import StickMode
 
 DT = 1.0 / 60.0
 

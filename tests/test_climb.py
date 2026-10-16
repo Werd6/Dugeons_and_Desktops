@@ -3,8 +3,8 @@ import math
 import pytest
 
 from dungeons_desktops.core.geometry import Vec2, wrap_angle
-from dungeons_desktops.creatures import stick_figure
-from dungeons_desktops.creatures.stick_figure import build_stick_figure
+from dungeons_desktops.game.adventurers import model as stick_figure
+from dungeons_desktops.game.adventurers.model import build_stick_figure
 from dungeons_desktops.rig.climb import ClimbDriver
 from dungeons_desktops.rig.skeleton import blend_poses, forward_kinematics, mirror_pose
 

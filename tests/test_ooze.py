@@ -4,12 +4,12 @@ from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.menu import DEFENDER_NAMES
 from dungeons_desktops.desktop.session import SUPPORTED_DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource
+from dungeons_desktops.game.actors.movement import RouteFollower
+from dungeons_desktops.game.defenders.ooze.actor import OOZE_HP, SKELETON_FADE
+from dungeons_desktops.game.defenders.ooze.render import BODY, draw_ooze
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import Anchor, Move, Route
 from dungeons_desktops.navigation.terrain import SurfaceKind
-from dungeons_desktops.render.ooze import BODY, draw_ooze
-from dungeons_desktops.systems.movement import RouteFollower
-from dungeons_desktops.systems.ooze import OOZE_HP, SKELETON_FADE
-from dungeons_desktops.systems.world import SimWorld
 
 FLOOR = 500.0
 STEP = 1 / 60

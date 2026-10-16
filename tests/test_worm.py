@@ -1,9 +1,6 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.actors import StickMode
-from dungeons_desktops.systems.debris import HOLE_LIFE
-from dungeons_desktops.systems.world import SimWorld
-from dungeons_desktops.systems.worm import (
+from dungeons_desktops.game.adventurers.actor import StickMode
+from dungeons_desktops.game.defenders.worm.actor import (
     MAX_SEGMENTS,
     MAX_SIZE,
     OUT_OF_GROUND_GRACE,
@@ -11,6 +8,9 @@ from dungeons_desktops.systems.worm import (
     SPACING,
     WormMode,
 )
+from dungeons_desktops.game.effects.debris import HOLE_LIFE
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.terrain import TerrainChange
 
 STEP = 1 / 60
 WINDOW = Rect(300, 300, 500, 300)

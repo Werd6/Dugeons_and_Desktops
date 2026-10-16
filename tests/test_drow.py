@@ -2,18 +2,18 @@ from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.overlay import DEFENDER_BARS
 from dungeons_desktops.desktop.session import DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
-from dungeons_desktops.navigation.planner import Move
-from dungeons_desktops.navigation.terrain import TerrainChange
-from dungeons_desktops.systems.darkness import FADE_TIME, GLOBE_TIME
-from dungeons_desktops.systems.drow import (
+from dungeons_desktops.game.actors.mortal import DROW_HP, LIZARD_HP
+from dungeons_desktops.game.defenders.drow.actor import (
     CROSSBOW_DAMAGE,
     LIZARD_LEGS,
     PERCH_RANGE,
     Drow,
     Lizard,
 )
-from dungeons_desktops.systems.mortal import DROW_HP, LIZARD_HP
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.defenders.drow.darkness import FADE_TIME, GLOBE_TIME
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.planner import Move
+from dungeons_desktops.navigation.terrain import TerrainChange
 
 STEP = 1 / 60
 BOXES = [Rect(200, 250, 400, 200), Rect(750, 150, 300, 300)]

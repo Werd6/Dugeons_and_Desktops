@@ -5,8 +5,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.render.elementals import draw_elemental
-from dungeons_desktops.systems.elemental_powers import (
+from dungeons_desktops.game.defenders.elementals.actor import (
+    KINDS,
+    MELEE_WINDUP,
+    SHIFT_TIME,
+    Action,
+)
+from dungeons_desktops.game.defenders.elementals.powers import (
     SPECIALS,
     BurningPatch,
     Caught,
@@ -14,9 +19,9 @@ from dungeons_desktops.systems.elemental_powers import (
     Shockwave,
     Wave,
 )
-from dungeons_desktops.systems.elementals import KINDS, MELEE_WINDUP, SHIFT_TIME, Action
-from dungeons_desktops.systems.flames import Flame
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.defenders.elementals.render import draw_elemental
+from dungeons_desktops.game.effects.flames import Flame
+from dungeons_desktops.game.world.simulation import SimWorld
 
 
 def scene(kind):

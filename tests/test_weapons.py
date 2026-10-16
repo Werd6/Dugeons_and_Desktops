@@ -1,7 +1,7 @@
 import pytest
 
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.creatures.stick_figure import build_stick_figure
+from dungeons_desktops.game.adventurers.model import build_stick_figure
 from dungeons_desktops.navigation.planner import Move
 from dungeons_desktops.preview.controller import RigPreviewController
 from dungeons_desktops.rig.locomotion import LocomotionDriver, LocomotionInput, PoseMode

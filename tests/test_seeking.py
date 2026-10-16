@@ -3,14 +3,14 @@
 import pytest
 
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.creatures.goblin import build_goblin
-from dungeons_desktops.creatures.stick_figure import build_stick_figure
+from dungeons_desktops.game.adventurers.actor import SEEK_RADIUS, Stickman
+from dungeons_desktops.game.adventurers.model import build_stick_figure
+from dungeons_desktops.game.defenders.goblins.model import build_goblin
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.navigation.terrain import SurfaceKind
 from dungeons_desktops.rig.locomotion import LocomotionDriver, LocomotionInput, PoseMode
 from dungeons_desktops.rig.weapons import Banner, GoblinSword, SpearThrower, Sword
-from dungeons_desktops.systems.actors import SEEK_RADIUS, Stickman
-from dungeons_desktops.systems.world import SimWorld
 
 DT = 1.0 / 60.0
 FLOOR = 700.0

@@ -1,10 +1,10 @@
 import pytest
 
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.creatures.stick_figure import BASE_HP, CLASSES
-from dungeons_desktops.systems.actors import DRAGON_DAMAGE, WORM_DAMAGE, StickMode
-from dungeons_desktops.systems.spells import MISSILE_DARTS
-from dungeons_desktops.systems.world import KILL_MARK_TIME, SimWorld
+from dungeons_desktops.game.adventurers.actor import DRAGON_DAMAGE, WORM_DAMAGE, StickMode
+from dungeons_desktops.game.adventurers.model import BASE_HP, CLASSES
+from dungeons_desktops.game.adventurers.spells import MISSILE_DARTS
+from dungeons_desktops.game.world.simulation import KILL_MARK_TIME, SimWorld
 
 DT = 1.0 / 60.0
 

@@ -1,8 +1,6 @@
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.navigation.planner import Anchor
-from dungeons_desktops.navigation.terrain import SurfaceKind, TerrainChange
-from dungeons_desktops.systems.lich import SPELLBOOK
-from dungeons_desktops.systems.necromancy import (
+from dungeons_desktops.game.defenders.lich.actor import SPELLBOOK
+from dungeons_desktops.game.defenders.lich.spells import (
     CHAIN_DAMAGE,
     FIREBALL_RADIUS,
     MISSILES,
@@ -10,7 +8,9 @@ from dungeons_desktops.systems.necromancy import (
     TENTACLE_TIME,
     WORD_DELAY,
 )
-from dungeons_desktops.systems.world import SimWorld
+from dungeons_desktops.game.world.simulation import SimWorld
+from dungeons_desktops.navigation.planner import Anchor
+from dungeons_desktops.navigation.terrain import SurfaceKind, TerrainChange
 
 STEP = 1 / 60
 FLOOR = 700.0

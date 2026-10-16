@@ -1,8 +1,8 @@
 from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.game.adventurers.actor import WORM_DAMAGE
+from dungeons_desktops.game.defenders.worm.actor import WormMode
+from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.rig.weapons import Bombs
-from dungeons_desktops.systems.actors import WORM_DAMAGE
-from dungeons_desktops.systems.world import SimWorld
-from dungeons_desktops.systems.worm import WormMode
 
 DT = 1.0 / 60.0
 

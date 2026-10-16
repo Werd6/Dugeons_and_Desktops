@@ -9,11 +9,18 @@ from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from dungeons_desktops.core.geometry import Vec2
-from dungeons_desktops.creatures.stick_figure import CLASSES
+from dungeons_desktops.game.adventurers.model import CLASSES
+from dungeons_desktops.game.defenders.chimera.render import draw_chimeras
+from dungeons_desktops.game.defenders.drakes.render import draw_drakes, draw_kobolds, draw_traps
+from dungeons_desktops.game.defenders.drow.render import draw_darkness, draw_drow, draw_lizards
+from dungeons_desktops.game.defenders.elementals.render import draw_elementals
+from dungeons_desktops.game.defenders.hydra.render import draw_hydras
+from dungeons_desktops.game.defenders.lich.render import draw_liches
+from dungeons_desktops.game.defenders.lich.spell_render import draw_necromancy, draw_scorches
+from dungeons_desktops.game.defenders.mimic.render import draw_mimics
+from dungeons_desktops.game.defenders.ooze.render import draw_oozes
 from dungeons_desktops.navigation.planner import Move
 from dungeons_desktops.preview.controller import RigPreviewController
-from dungeons_desktops.render.chimera import draw_chimeras
-from dungeons_desktops.render.drakes import draw_drakes, draw_kobolds, draw_traps
 from dungeons_desktops.render.draw import (
     BACKGROUND,
     GROUND,
@@ -38,13 +45,6 @@ from dungeons_desktops.render.draw import (
     pen,
     qt,
 )
-from dungeons_desktops.render.drow import draw_darkness, draw_drow, draw_lizards
-from dungeons_desktops.render.elementals import draw_elementals
-from dungeons_desktops.render.hydra import draw_hydras
-from dungeons_desktops.render.lich import draw_liches
-from dungeons_desktops.render.mimic import draw_mimics
-from dungeons_desktops.render.necromancy import draw_necromancy, draw_scorches
-from dungeons_desktops.render.ooze import draw_oozes
 
 BOX_FILL = QColor(44, 48, 60)
 BOX_TITLE = QColor(58, 63, 78)

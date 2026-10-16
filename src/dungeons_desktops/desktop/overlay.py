@@ -26,9 +26,24 @@ from dungeons_desktops.desktop.windows import (
     WindowSourceError,
     demo_windows,
 )
-from dungeons_desktops.render.chimera import MANE, draw_chimeras
-from dungeons_desktops.render.displacer import FUR_SHEEN
-from dungeons_desktops.render.drakes import draw_drakes, draw_kobolds, draw_traps
+from dungeons_desktops.game.defenders.chimera.render import MANE, draw_chimeras
+from dungeons_desktops.game.defenders.displacer.render import FUR_SHEEN
+from dungeons_desktops.game.defenders.drakes.render import draw_drakes, draw_kobolds, draw_traps
+from dungeons_desktops.game.defenders.drow.render import (
+    FAERIE,
+    draw_darkness,
+    draw_drow,
+    draw_lizards,
+)
+from dungeons_desktops.game.defenders.elementals.render import COLOURS as ELEMENT_COLOURS
+from dungeons_desktops.game.defenders.elementals.render import WATER_LIGHT, draw_elementals
+from dungeons_desktops.game.defenders.hydra.render import CREST, draw_hydras
+from dungeons_desktops.game.defenders.lich.render import GLOW, draw_liches
+from dungeons_desktops.game.defenders.lich.spell_render import draw_necromancy, draw_scorches
+from dungeons_desktops.game.defenders.mimic.render import WOOD_LIGHT, draw_mimics
+from dungeons_desktops.game.defenders.minotaur.render import HIDE_LIGHT
+from dungeons_desktops.game.defenders.ooze.render import BODY as OOZE_BODY
+from dungeons_desktops.game.defenders.ooze.render import draw_oozes
 from dungeons_desktops.render.draw import (
     DRAGON_SKIN,
     FLAYER_ROBE,
@@ -61,21 +76,6 @@ from dungeons_desktops.render.draw import (
     draw_worm,
     pen,
 )
-from dungeons_desktops.render.drow import (
-    FAERIE,
-    draw_darkness,
-    draw_drow,
-    draw_lizards,
-)
-from dungeons_desktops.render.elementals import COLOURS as ELEMENT_COLOURS
-from dungeons_desktops.render.elementals import WATER_LIGHT, draw_elementals
-from dungeons_desktops.render.hydra import CREST, draw_hydras
-from dungeons_desktops.render.lich import GLOW, draw_liches
-from dungeons_desktops.render.mimic import WOOD_LIGHT, draw_mimics
-from dungeons_desktops.render.minotaur import HIDE_LIGHT
-from dungeons_desktops.render.necromancy import draw_necromancy, draw_scorches
-from dungeons_desktops.render.ooze import BODY as OOZE_BODY
-from dungeons_desktops.render.ooze import draw_oozes
 
 FRAME_MS = 16
 POLL_FAST_MS = 125
