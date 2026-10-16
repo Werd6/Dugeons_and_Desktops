@@ -9,7 +9,14 @@ from PySide6.QtGui import QImage, QPainter
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.session import DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource
+from dungeons_desktops.game.adventurers import render
 from dungeons_desktops.game.adventurers.model import CALLINGS, CLASSES, HEROES
+from dungeons_desktops.game.adventurers.render import (
+    HERO_PLATE,
+    HERO_PLATE_DARK,
+    HERO_SILVER,
+    draw_stickman,
+)
 from dungeons_desktops.game.defenders.mindflayer.actor import PULSE_WINDUP, Power
 from dungeons_desktops.game.heroes.dio.actor import (
     DIO_AWARENESS_RANGE,
@@ -30,17 +37,10 @@ from dungeons_desktops.game.heroes.dio.actor import (
     HeroFighter,
     SpectralShield,
 )
+from dungeons_desktops.game.heroes.dio.render import draw_dio_effects
+from dungeons_desktops.game.heroes.dio.weapon import HeroTridentAndShield
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.preview.controller import RigPreviewController
-from dungeons_desktops.render import scene as render
-from dungeons_desktops.render.scene import (
-    HERO_PLATE,
-    HERO_PLATE_DARK,
-    HERO_SILVER,
-    draw_dio_effects,
-    draw_stickman,
-)
-from dungeons_desktops.rig.equipment import HeroTridentAndShield
 from dungeons_desktops.rig.locomotion import PoseMode
 
 DT = 1 / 60

@@ -14,8 +14,9 @@ lich is left they crumble, `CRUMBLE_AFTER` later.
 from __future__ import annotations
 
 from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.game.actors.base import Actor
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.actor import Actor, Stickman, World
+from dungeons_desktops.game.adventurers.actor import Stickman
 from dungeons_desktops.game.defenders.goblins.actor import (
     REPLAN_EVERY,
     SWORD_LEAD,
@@ -26,6 +27,7 @@ from dungeons_desktops.game.defenders.goblins.actor import (
     _hunt,
 )
 from dungeons_desktops.game.defenders.goblins.weapons import GoblinSword
+from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import Anchor, Planner
 
 SKELETON_HP = 2

@@ -15,8 +15,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
+from dungeons_desktops.game.actors.base import GOAL_SNAP, Actor, surface_below
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.actor import GOAL_SNAP, Actor, World, surface_below
+from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import ALONG_MOVES, Anchor, Move
 from dungeons_desktops.navigation.terrain import Surface
 

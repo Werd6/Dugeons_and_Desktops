@@ -5,10 +5,8 @@ from __future__ import annotations
 import math
 
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.game.adventurers.actor import (
-    Stickman,
-    surface_below,
-)
+from dungeons_desktops.game.actors.base import surface_below
+from dungeons_desktops.game.adventurers.actor import Stickman
 from dungeons_desktops.game.defenders.chimera.actor import Chimera
 from dungeons_desktops.game.defenders.displacer.actor import Displacer
 from dungeons_desktops.game.defenders.dragon.actor import Dragon

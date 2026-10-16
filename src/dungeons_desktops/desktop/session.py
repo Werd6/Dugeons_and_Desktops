@@ -37,9 +37,10 @@ from collections.abc import Sequence
 
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.windows import WindowRecord, WindowSource, WindowTracker
+from dungeons_desktops.game.actors.base import surface_below
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.actor import Stickman, surface_below
+from dungeons_desktops.game.adventurers.actor import Stickman
 from dungeons_desktops.game.defenders.drakes.drake import COLOURS
 from dungeons_desktops.game.defenders.drakes.kobold import KOBOLD_HP
 from dungeons_desktops.game.defenders.drow.actor import DROW_HP

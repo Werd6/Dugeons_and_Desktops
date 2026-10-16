@@ -15,7 +15,7 @@ from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.locomotion import LocomotionInput, PoseMode
 
 if TYPE_CHECKING:
-    from dungeons_desktops.game.adventurers.actor import World
+    from dungeons_desktops.game.world.api import World
     from dungeons_desktops.navigation.terrain import TerrainChange
 
 

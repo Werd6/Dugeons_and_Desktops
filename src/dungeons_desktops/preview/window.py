@@ -18,7 +18,9 @@ from dungeons_desktops.game.defenders.hydra.render import draw_hydras
 from dungeons_desktops.game.defenders.lich.render import draw_liches
 from dungeons_desktops.game.defenders.lich.spell_render import draw_necromancy, draw_scorches
 from dungeons_desktops.game.defenders.mimic.render import draw_mimics
+from dungeons_desktops.game.defenders.mindflayer.render import draw_mindflayers
 from dungeons_desktops.game.defenders.ooze.render import draw_oozes
+from dungeons_desktops.game.heroes.dio.render import draw_dio_effects
 from dungeons_desktops.navigation.planner import Move
 from dungeons_desktops.preview.controller import RigPreviewController
 from dungeons_desktops.render.hud import draw_kill_marks
@@ -27,13 +29,11 @@ from dungeons_desktops.render.scene import (
     GROUND,
     draw_actors,
     draw_debris,
-    draw_dio_effects,
     draw_displacers,
     draw_dragon,
     draw_fallen,
     draw_gore,
     draw_holes,
-    draw_mindflayers,
     draw_minotaurs,
     draw_projectiles,
     draw_skeletons,

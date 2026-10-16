@@ -44,8 +44,8 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp
+from dungeons_desktops.game.actors.base import surface_below
 from dungeons_desktops.game.actors.mortal import Mortal
-from dungeons_desktops.game.adventurers.actor import surface_below
 from dungeons_desktops.game.defenders.dragon.actor import Flame, climbing_wall
 from dungeons_desktops.game.effects.breath import Mote, splash, step_motes
 from dungeons_desktops.navigation.planner import Anchor, Move, MoveSettings, Planner

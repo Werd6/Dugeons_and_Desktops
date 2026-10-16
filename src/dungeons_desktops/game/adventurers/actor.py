@@ -29,6 +29,7 @@ from dungeons_desktops.game.actors.hunting import nearest
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.game.adventurers.combat import ADVENTURER_DAMAGE
 from dungeons_desktops.game.adventurers.spells import ARROW_GRAVITY
+from dungeons_desktops.game.adventurers.weapons import Bombs, Bow, DruidStaff, HolyStaff, Wand
 from dungeons_desktops.game.effects.ballistics import GRAVITY as BOMB_GRAVITY
 from dungeons_desktops.game.effects.ballistics import has_clear_lob, lob_velocity
 from dungeons_desktops.game.effects.breath import DEATH_TIME, Demise
@@ -36,17 +37,7 @@ from dungeons_desktops.game.effects.fire import BURN_TIME, Burn
 from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.biped import BipedLayout
-from dungeons_desktops.rig.equipment import (
-    CLINGING,
-    Bombs,
-    Bow,
-    DruidStaff,
-    HolyStaff,
-    Stroke,
-    Sword,
-    Wand,
-    Weapon,
-)
+from dungeons_desktops.rig.equipment import CLINGING, Stroke, Sword, Weapon
 from dungeons_desktops.rig.locomotion import (
     LocomotionInput,
     PoseMode,

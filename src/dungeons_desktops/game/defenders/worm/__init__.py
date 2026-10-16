@@ -6,4 +6,12 @@ from dungeons_desktops.game.defenders.worm.actor import (
     WormMode,
 )
 
-__all__ = ['Worm', 'WormMode', 'WORM_HP']
+__all__ = ["Worm", "WormMode", "WORM_HP", "draw_worm"]
+
+
+def __getattr__(name: str):
+    if name == "draw_worm":
+        from dungeons_desktops.game.defenders.worm.render import draw_worm
+
+        return draw_worm
+    raise AttributeError(name)

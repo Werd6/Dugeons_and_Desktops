@@ -29,11 +29,11 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp
+from dungeons_desktops.game.actors.base import surface_below
 from dungeons_desktops.game.actors.floating import Floater
 from dungeons_desktops.game.actors.hunting import nearest
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.actor import surface_below
 from dungeons_desktops.game.defenders.elementals.powers import (
     DEATHS,
     SOURCE,

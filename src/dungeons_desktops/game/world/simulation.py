@@ -19,12 +19,8 @@ from dataclasses import dataclass
 
 from dungeons_desktops.core.clock import FixedStepClock
 from dungeons_desktops.core.geometry import Rect, Vec2
-from dungeons_desktops.game.adventurers.actor import (
-    GOBLIN_DAMAGE,
-    Actor,
-    Stickman,
-    surface_below,
-)
+from dungeons_desktops.game.actors.base import Actor, surface_below
+from dungeons_desktops.game.adventurers.actor import GOBLIN_DAMAGE, Stickman
 from dungeons_desktops.game.adventurers.alchemy import Explosion, Vials
 from dungeons_desktops.game.adventurers.combat import ADVENTURER_DAMAGE
 from dungeons_desktops.game.adventurers.spells import Spells

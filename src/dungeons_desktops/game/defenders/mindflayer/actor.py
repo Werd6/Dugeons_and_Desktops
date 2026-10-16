@@ -30,7 +30,8 @@ from dungeons_desktops.game.actors.floating import Floater
 from dungeons_desktops.game.actors.hunting import nearest
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.actor import Stickman, World
+from dungeons_desktops.game.adventurers.actor import Stickman
+from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.biped import UP
 from dungeons_desktops.rig.ragdoll import Ragdoll

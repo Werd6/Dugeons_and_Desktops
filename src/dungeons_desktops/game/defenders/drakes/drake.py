@@ -419,7 +419,7 @@ class Drake(Mortal):
         """The surface under `stickman` and the x on it this drake wants to stand at:
         `offset` from him, or by default its own distance off to its side of him
         (alternate drakes take opposite sides)."""
-        from dungeons_desktops.game.adventurers.actor import surface_below
+        from dungeons_desktops.game.actors.base import surface_below
 
         foot = stickman.contact()
         anchor = surface_below(self.world.goblin_planner, foot - Vec2(0.0, 2.0))
@@ -455,7 +455,7 @@ class Drake(Mortal):
 
     def _grounded(self, stickman: Stickman) -> bool:
         """On his feet on a window top or the floor: somewhere to dive on him."""
-        from dungeons_desktops.game.adventurers.actor import surface_below
+        from dungeons_desktops.game.actors.base import surface_below
 
         foot = stickman.contact()
         anchor = surface_below(self.world.goblin_planner, foot - Vec2(0.0, 2.0))
@@ -734,7 +734,7 @@ class Drake(Mortal):
             leg.foot, leg.hock, leg.root = flip(leg.foot), flip(leg.hock), flip(leg.root)
 
     def _touch_down(self, landing: Vec2) -> None:
-        from dungeons_desktops.game.adventurers.actor import surface_below
+        from dungeons_desktops.game.actors.base import surface_below
 
         anchor = surface_below(self.world.goblin_planner, landing - Vec2(0.0, 2.0))
         if anchor is None:
@@ -916,7 +916,7 @@ class Drake(Mortal):
     # ----- terrain -----------------------------------------------------------------
 
     def terrain_changed(self, change: TerrainChange) -> None:
-        from dungeons_desktops.game.adventurers.actor import surface_below
+        from dungeons_desktops.game.actors.base import surface_below
 
         if self.mode is DrakeMode.DEAD:
             return

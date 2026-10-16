@@ -560,7 +560,7 @@ class Dragon(Mortal):
             self._touch_down(landing)
 
     def _touch_down(self, landing: Vec2) -> None:
-        from dungeons_desktops.game.adventurers.actor import surface_below
+        from dungeons_desktops.game.actors.base import surface_below
 
         anchor = surface_below(self.world.goblin_planner, landing - Vec2(0.0, 2.0))
         if anchor is None:
@@ -712,7 +712,7 @@ class Dragon(Mortal):
     # ----- terrain ---------------------------------------------------------------
 
     def terrain_changed(self, change: TerrainChange) -> None:
-        from dungeons_desktops.game.adventurers.actor import surface_below
+        from dungeons_desktops.game.actors.base import surface_below
 
         if self.mode is DragonMode.LAND:
             self._start_landing()

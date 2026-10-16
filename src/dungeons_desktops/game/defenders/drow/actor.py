@@ -34,7 +34,8 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp
-from dungeons_desktops.game.adventurers.actor import Actor, Stickman, World
+from dungeons_desktops.game.actors.base import Actor
+from dungeons_desktops.game.adventurers.actor import Stickman
 from dungeons_desktops.game.defenders.displacer import actor as displacer
 from dungeons_desktops.game.defenders.displacer.actor import Displacer, Intent, along
 from dungeons_desktops.game.defenders.drakes.drake import Missile, lobbed, step_arrows
@@ -50,6 +51,7 @@ from dungeons_desktops.game.defenders.goblins.actor import (
     _hunt,
 )
 from dungeons_desktops.game.defenders.mimic.legs import Leg, LegRig, LegShape
+from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import Anchor, Move, Planner
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 

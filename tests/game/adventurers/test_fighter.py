@@ -11,9 +11,10 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.game.adventurers.weapons import FighterSword
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.render.scene import draw_stickman
-from dungeons_desktops.rig.equipment import FighterSword, Sword
+from dungeons_desktops.rig.equipment import Sword
 
 DT = 1 / 60
 

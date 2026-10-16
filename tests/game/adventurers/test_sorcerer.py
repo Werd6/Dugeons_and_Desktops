@@ -9,9 +9,9 @@ from PySide6.QtGui import QImage, QPainter
 from dungeons_desktops.core.geometry import Vec2
 from dungeons_desktops.game.adventurers.model import CLASSES, build_stick_figure
 from dungeons_desktops.game.adventurers.spells import Spells
+from dungeons_desktops.game.adventurers.weapons import FireOrb
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.render.scene import draw_spells, draw_stickman
-from dungeons_desktops.rig.equipment import FireOrb
 from dungeons_desktops.rig.locomotion import LocomotionDriver, LocomotionInput, PoseMode
 from dungeons_desktops.rig.skeleton import forward_kinematics
 

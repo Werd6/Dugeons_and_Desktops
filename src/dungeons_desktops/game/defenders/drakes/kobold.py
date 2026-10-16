@@ -67,7 +67,7 @@ ZERO = Vec2(0.0, 0.0)
 
 
 def _surface_under(world: SimWorld, point: Vec2):
-    from dungeons_desktops.game.adventurers.actor import surface_below
+    from dungeons_desktops.game.actors.base import surface_below
 
     return surface_below(world.goblin_planner, point)
 

@@ -11,10 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from dungeons_desktops.navigation.planner import MoveSettings
-from dungeons_desktops.rig.biped import UP, BipedLayout
-from dungeons_desktops.rig.climb import ClimbSettings
-from dungeons_desktops.rig.equipment import (
+from dungeons_desktops.game.adventurers.weapons import (
     Axe,
     Bombs,
     Bow,
@@ -23,11 +20,14 @@ from dungeons_desktops.rig.equipment import (
     FighterSword,
     FireOrb,
     HammerAndShield,
-    HeroTridentAndShield,
     HolyStaff,
     Wand,
-    Weapon,
 )
+from dungeons_desktops.game.heroes.dio.weapon import HeroTridentAndShield
+from dungeons_desktops.navigation.planner import MoveSettings
+from dungeons_desktops.rig.biped import UP, BipedLayout
+from dungeons_desktops.rig.climb import ClimbSettings
+from dungeons_desktops.rig.equipment import Weapon
 from dungeons_desktops.rig.ik import IkChain
 from dungeons_desktops.rig.skeleton import BoneDef, Skeleton
 from dungeons_desktops.rig.walk import WalkSettings

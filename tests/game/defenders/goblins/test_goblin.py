@@ -7,10 +7,10 @@ from dungeons_desktops.game.defenders.goblins.actor import (
     SWORD_START_REACH,
     Goblin,
 )
+from dungeons_desktops.game.defenders.goblins.weapons import GoblinSword
 from dungeons_desktops.game.effects.ballistics import GRAVITY, lob_velocity
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.preview.controller import RigPreviewController
-from dungeons_desktops.rig.equipment import GoblinSword
 from dungeons_desktops.rig.locomotion import PoseMode
 
 DT = 1.0 / 60.0

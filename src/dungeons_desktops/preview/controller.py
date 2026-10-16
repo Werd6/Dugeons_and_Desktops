@@ -9,8 +9,8 @@ somewhere else. Dragging a box rebuilds the terrain and every actor re-anchors.
 from __future__ import annotations
 
 from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.game.actors.base import Actor
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.actor import Actor
 from dungeons_desktops.game.defenders.elementals.actor import KINDS
 from dungeons_desktops.game.defenders.goblins.actor import Goblin
 from dungeons_desktops.game.effects.breath import BREATHS, VARIANTS

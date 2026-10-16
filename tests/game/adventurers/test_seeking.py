@@ -6,10 +6,11 @@ from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.game.adventurers.actor import SEEK_RADIUS, Stickman
 from dungeons_desktops.game.adventurers.model import build_stick_figure
 from dungeons_desktops.game.defenders.goblins.model import build_goblin
+from dungeons_desktops.game.defenders.goblins.weapons import Banner, GoblinSword, SpearThrower
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.navigation.terrain import SurfaceKind
-from dungeons_desktops.rig.equipment import Banner, GoblinSword, SpearThrower, Sword
+from dungeons_desktops.rig.equipment import Sword
 from dungeons_desktops.rig.locomotion import LocomotionDriver, LocomotionInput, PoseMode
 
 DT = 1.0 / 60.0

@@ -41,9 +41,11 @@ from dungeons_desktops.game.defenders.hydra.render import CREST, draw_hydras
 from dungeons_desktops.game.defenders.lich.render import GLOW, draw_liches
 from dungeons_desktops.game.defenders.lich.spell_render import draw_necromancy, draw_scorches
 from dungeons_desktops.game.defenders.mimic.render import WOOD_LIGHT, draw_mimics
+from dungeons_desktops.game.defenders.mindflayer.render import draw_mindflayers
 from dungeons_desktops.game.defenders.minotaur.render import HIDE_LIGHT
 from dungeons_desktops.game.defenders.ooze.render import BODY as OOZE_BODY
 from dungeons_desktops.game.defenders.ooze.render import draw_oozes
+from dungeons_desktops.game.heroes.dio.render import draw_dio_effects
 from dungeons_desktops.render.hud import (
     HEALTH_BAR_HEIGHT,
     draw_health_bar,
@@ -61,13 +63,11 @@ from dungeons_desktops.render.scene import (
     WORM_SKIN,
     draw_actors,
     draw_debris,
-    draw_dio_effects,
     draw_displacers,
     draw_dragon,
     draw_fallen,
     draw_gore,
     draw_holes,
-    draw_mindflayers,
     draw_minotaurs,
     draw_projectiles,
     draw_skeletons,
@@ -226,7 +226,9 @@ def _float_above_everything(widget: QWidget) -> None:
     """macOS: stay visible on every Space, over the menu bar (characters on a maximized
     window's top stand in that strip) and while other apps are active, and never take the
     mouse. Qt's flags cover most of this; AppKit makes it explicit where available."""
-    if sys.platform != "darwin":
+    # AppKit cannot wrap the synthetic window handles supplied by Qt's headless
+    # platforms, which are used by smoke tests and CI.
+    if sys.platform != "darwin" or QApplication.platformName() != "cocoa":
         return
     try:
         import AppKit
