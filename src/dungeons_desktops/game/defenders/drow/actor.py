@@ -34,12 +34,12 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp
-from dungeons_desktops.game.actors.mortal import DROW_HP, LIZARD_HP
 from dungeons_desktops.game.adventurers.actor import Actor, Stickman, World
 from dungeons_desktops.game.defenders.displacer import actor as displacer
 from dungeons_desktops.game.defenders.displacer.actor import Displacer, Intent, along
 from dungeons_desktops.game.defenders.drakes.drake import Missile, lobbed, step_arrows
 from dungeons_desktops.game.defenders.drow import model as drow_body
+from dungeons_desktops.game.defenders.drow.weapons import TwinScimitars
 from dungeons_desktops.game.defenders.goblins.actor import (
     REPLAN_EVERY,
     SWORD_LEAD,
@@ -52,13 +52,15 @@ from dungeons_desktops.game.defenders.goblins.actor import (
 from dungeons_desktops.game.defenders.mimic.legs import Leg, LegRig, LegShape
 from dungeons_desktops.navigation.planner import Anchor, Move, Planner
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
-from dungeons_desktops.rig.weapons import TwinScimitars
 
 if TYPE_CHECKING:
     from dungeons_desktops.game.world.simulation import SimWorld
 
 # ----- the lizard's body (its frame: x toward the head, y toward its feet, from the
 # displacer's body center, `BODY_HEIGHT` off the surface) ------------------------------
+
+LIZARD_HP = 5
+DROW_HP = 1
 
 BODY_Y = 6.0
 """Its belly-to-back middle: it lies low, 7 px off its surface."""

@@ -1,32 +1,7 @@
-"""Monster HP: what the goblins, the worm, the dragon, the mind flayer and its
-intellect devourers, and the displacer beast share.
-
-Every adventurer attack that lands takes `ADVENTURER_DAMAGE` off a monster. At 0 HP
-the world moves it out of the living (`SimWorld.hurt_monster`) into `fallen`, where
-it falls limp, lies a while, fades, and is gone.
-"""
+"""Shared mortal lifecycle and corpse fading."""
 
 from __future__ import annotations
 
-GOBLIN_HP = 5
-WORM_HP = 4
-DRAGON_HP = 15
-MIND_FLAYER_HP = 9
-DEVOURER_HP = 3
-DISPLACER_HP = 14
-MINOTAUR_HP = 26
-OOZE_HP = 30
-LICH_HP = 6
-SKELETON_HP = 2
-MIMIC_HP = 8
-HYDRA_HP = 20
-DRAKE_HP = 4
-KOBOLD_HP = 2
-LIZARD_HP = 5
-DROW_HP = 1
-CHIMERA_HP = 22
-ELEMENTAL_HP = 20
-ADVENTURER_DAMAGE = 1
 FADE_TIME = 0.5
 
 

@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 from dungeons_desktops.core.geometry import Vec2, clamp
 from dungeons_desktops.game.actors.floating import Floater
 from dungeons_desktops.game.actors.hunting import nearest
-from dungeons_desktops.game.actors.mortal import ELEMENTAL_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.game.adventurers.actor import surface_below
 from dungeons_desktops.game.defenders.elementals.powers import (
@@ -48,6 +48,8 @@ from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+ELEMENTAL_HP = 20
 
 KINDS = ("water", "earth", "air", "fire")
 """Its forms, in the order it wears them."""

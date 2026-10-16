@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
-from dungeons_desktops.game.actors.mortal import OOZE_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.actors.movement import RouteFollower
 from dungeons_desktops.game.defenders.displacer.actor import along
 from dungeons_desktops.navigation.planner import ALONG_MOVES, Anchor, Move, MoveSettings
@@ -24,6 +24,8 @@ from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+OOZE_HP = 30
 
 WIDTH = 86.0
 HALF_WIDTH = WIDTH / 2.0

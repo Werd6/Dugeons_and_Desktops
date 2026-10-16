@@ -41,18 +41,38 @@ get at him. With `MINOTAUR_HP` gone it topples onto its back.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
-from dungeons_desktops.game.actors.mortal import MINOTAUR_HP, Mortal
-from dungeons_desktops.game.adventurers.alchemy import lob_velocity
+from dungeons_desktops.game.actors.mortal import Mortal
+from dungeons_desktops.game.defenders.minotaur.combat import (
+    Thrown,
+)
+from dungeons_desktops.game.defenders.minotaur.combat import (
+    segment_distance as _segment_distance,
+)
+from dungeons_desktops.game.defenders.minotaur.movement import (
+    Flight,
+    Haul,
+)
+from dungeons_desktops.game.defenders.minotaur.movement import (
+    approach as _approach,
+)
+from dungeons_desktops.game.defenders.minotaur.movement import (
+    carry_on as _carry_on,
+)
+from dungeons_desktops.game.defenders.minotaur.movement import (
+    sign as _sign,
+)
+from dungeons_desktops.game.effects.ballistics import lob_velocity
 from dungeons_desktops.navigation.planner import Anchor, Move, MoveSettings, Planner, RouteStep
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+MINOTAUR_HP = 26
 
 GRAVITY = 1250.0
 HEIGHT = 64.0
@@ -277,78 +297,6 @@ STANCES = ("windup", "skid", "stomp", "punch", "smash", "hurl")
 """Actions it plants its feet for."""
 POSE_SPRING = 22.0
 """How stiffly (1/s) its posture and head follow from one move into the next."""
-
-
-@dataclass
-class Flight:
-    """A ballistic arc from `start` that ends at `target` after `duration` (a fall, with
-    no target, goes on until it lands on something)."""
-
-    start: Vec2
-    launch: Vec2
-    duration: float
-    target: Anchor | None
-    aim: Vec2
-    """Where the arc was worked out to end (the target may have moved on since)."""
-    kind: str
-    """"jump", "drop" or "fall"."""
-    from_wall: bool = False
-    age: float = 0.0
-
-
-@dataclass
-class Haul:
-    """Over a lip (`mantle` up, `unmantle` down) or between a wall and the walk its
-    bottom rests on (`grab`)."""
-
-    start: Vec2
-    end: Vec2
-    duration: float
-    target: Anchor
-    kind: str
-    from_wall: bool = False
-    age: float = 0.0
-    speed: float = 0.0
-    """How fast it was climbing as it set off (it carries on as smoothly)."""
-
-
-@dataclass
-class Thrown:
-    """An adventurer in the air, launched at `velocity` from `origin`."""
-
-    victim: Stickman
-    origin: Vec2
-    velocity: Vec2
-    ground_y: float
-    age: float = 0.0
-
-
-def _sign(value: float, default: int = 1) -> int:
-    if value > 0.0:
-        return 1
-    if value < 0.0:
-        return -1
-    return default
-
-
-def _approach(value: float, target: float, rate: float) -> float:
-    if value < target:
-        return min(target, value + rate)
-    return max(target, value - rate)
-
-
-def _segment_distance(point: Vec2, a: Vec2, b: Vec2) -> float:
-    ab = b - a
-    length = ab.length_sq()
-    t = 0.0 if length < 1e-9 else clamp((point - a).dot(ab) / length, 0.0, 1.0)
-    return point.distance_to(a + ab * t)
-
-
-def _carry_on(u: float, carried: float, distance: float) -> float:
-    """0..1 along an eased move of `distance` that sets off already moving (as if
-    covering `carried` at its starting pace over the whole move) and eases to a stop."""
-    lead = clamp(carried / distance, 0.0, 2.5) if distance > 1e-6 else 0.0
-    return (u * u * u - 2.0 * u * u + u) * lead + (3.0 * u * u - 2.0 * u * u * u)
 
 
 class Minotaur(Mortal):

@@ -22,33 +22,21 @@ from __future__ import annotations
 
 import math
 from enum import Enum
-from random import Random
-from typing import Protocol
 
-from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.game.actors.base import Actor, out_of_boxes, surface_below
 from dungeons_desktops.game.actors.hunting import nearest
-from dungeons_desktops.game.actors.mortal import ADVENTURER_DAMAGE
-from dungeons_desktops.game.actors.movement import RouteFollower
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.adventurers.alchemy import GRAVITY as BOMB_GRAVITY
-from dungeons_desktops.game.adventurers.alchemy import Vials, has_clear_lob, lob_velocity
-from dungeons_desktops.game.adventurers.spells import ARROW_GRAVITY, Spells
+from dungeons_desktops.game.adventurers.combat import ADVENTURER_DAMAGE
+from dungeons_desktops.game.adventurers.spells import ARROW_GRAVITY
+from dungeons_desktops.game.effects.ballistics import GRAVITY as BOMB_GRAVITY
+from dungeons_desktops.game.effects.ballistics import has_clear_lob, lob_velocity
 from dungeons_desktops.game.effects.breath import DEATH_TIME, Demise
 from dungeons_desktops.game.effects.fire import BURN_TIME, Burn
-from dungeons_desktops.game.effects.gore import Gore
-from dungeons_desktops.game.effects.projectiles import Projectiles
-from dungeons_desktops.navigation.planner import Anchor, Move, Planner, Route, RouteStep
-from dungeons_desktops.navigation.terrain import TerrainChange
+from dungeons_desktops.game.world.api import World
+from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.biped import BipedLayout
-from dungeons_desktops.rig.locomotion import (
-    LocomotionDriver,
-    LocomotionInput,
-    PoseMode,
-    UpperBodyLayer,
-)
-from dungeons_desktops.rig.ragdoll import Ragdoll
-from dungeons_desktops.rig.skeleton import BoneTransform, Pose, forward_kinematics
-from dungeons_desktops.rig.weapons import (
+from dungeons_desktops.rig.equipment import (
     CLINGING,
     Bombs,
     Bow,
@@ -59,6 +47,13 @@ from dungeons_desktops.rig.weapons import (
     Wand,
     Weapon,
 )
+from dungeons_desktops.rig.locomotion import (
+    LocomotionInput,
+    PoseMode,
+    UpperBodyLayer,
+)
+from dungeons_desktops.rig.ragdoll import Ragdoll
+from dungeons_desktops.rig.skeleton import BoneTransform, Pose, forward_kinematics
 
 ACTING_MODES = frozenset({PoseMode.WALK, PoseMode.CLIMB, PoseMode.HANG})
 BODY_RADIUS = 4.0
@@ -117,283 +112,6 @@ ILLUSION_GLANCE = 160.0
 """A displacer beast's illusion this near draws his eye even out of his reach."""
 
 ZERO = Vec2(0.0, 0.0)
-
-
-class World(Protocol):
-    boxes: list[Rect]
-    floor_y: float
-    width: float
-    planner: Planner
-    goblin_planner: Planner
-    projectiles: Projectiles
-    vials: Vials
-    spells: Spells
-    random: Random
-    stickmen: list[Stickman]
-    step: float
-    gore: Gore
-    kills: int
-
-    def say(self, actor: Actor, message: str) -> None: ...
-
-    def nearest_monster(
-        self, point: Vec2, reach: float, through_ground: bool = False
-    ) -> tuple[object, Vec2] | None: ...
-
-    def monsters_near(
-        self, point: Vec2, reach: float, through_ground: bool = False
-    ) -> list[tuple[object, Vec2]]: ...
-
-    def locate(self, monster: object) -> Vec2 | None: ...
-
-    def illusions(self) -> list: ...
-
-    def locate_prey(self, stickman: object) -> Vec2 | None: ...
-
-    def closest_part(
-        self, monster: object, point: Vec2, through_ground: bool = False
-    ) -> Vec2 | None: ...
-
-    def hurt_monster(
-        self,
-        monster: object,
-        amount: int,
-        point: Vec2,
-        push: Vec2,
-        ranged: bool = False,
-        attacker: object = None,
-    ) -> bool: ...
-
-    def detonate(self, center: Vec2) -> None: ...
-
-    def mark_kill(self, point: Vec2) -> None: ...
-
-    def spawn_devourer(self, point: Vec2) -> None: ...
-
-
-def _distance_to_segment(point: Vec2, a: Vec2, b: Vec2) -> float:
-    ab = b - a
-    length_sq = ab.length_sq()
-    t = 0.0 if length_sq == 0 else max(0.0, min(1.0, (point - a).dot(ab) / length_sq))
-    return point.distance_to(a + ab * t)
-
-
-def _out_of_boxes(point: Vec2, boxes: list[Rect], margin: float = 2.0) -> Vec2:
-    """`point`, or if it's inside a box, the nearest spot just outside it (a climber's
-    hand is up against his window, and an arrow or bomb let go in there never leaves)."""
-    for box in boxes:
-        if box.contains(point):
-            point = min(
-                (
-                    Vec2(box.left - margin, point.y),
-                    Vec2(box.right + margin, point.y),
-                    Vec2(point.x, box.top - margin),
-                    Vec2(point.x, box.bottom + margin),
-                ),
-                key=point.distance_to,
-            )
-    return point
-
-
-_GONE = -1
-"""`_through`'s answer for a box that was removed."""
-
-
-def _through(box: int | None, changes: list[TerrainChange]) -> int | None:
-    """The index `box` has after `changes`, or `_GONE`."""
-    for change in changes:
-        if box == _GONE or change.removed(box):
-            return _GONE
-        box = change.new_index(box)
-    return box
-
-
-def surface_below(planner: Planner, point: Vec2) -> Anchor:
-    """The walkable spot straight below `point` (or the nearest one if nothing is below)."""
-    below = [
-        s
-        for s in planner.surfaces
-        if s.walkable and s.low - 1.0 <= point.x <= s.high + 1.0 and s.start.y >= point.y - 4.0
-    ]
-    if below:
-        surface = min(below, key=lambda s: s.start.y)
-        return Anchor(surface, surface.closest_point(Vec2(point.x, surface.start.y)))
-    return planner.anchor_near(point, walk_only=True)
-
-
-class Actor:
-    def __init__(
-        self,
-        world: World,
-        layout: BipedLayout,
-        anchor: Anchor,
-        upper: UpperBodyLayer | None = None,
-    ) -> None:
-        self.world = world
-        self.layout = layout
-        self.follower = RouteFollower(anchor)
-        self.locomotion = LocomotionDriver(layout, self.follower.command(), upper=upper)
-        self.goal: Vec2 | None = None
-        self.goal_reachable = True
-        self.needs_replan = False
-        self._pending_changes: list[TerrainChange] = []
-        """Terrain changes during the current transition, applied when it lands."""
-        self.velocity = ZERO
-        self._last_contact = anchor.point
-
-    @property
-    def planner(self) -> Planner:
-        return self.world.planner
-
-    @property
-    def animated(self) -> bool:
-        return True
-
-    @property
-    def facing(self) -> int:
-        return self.locomotion.facing
-
-    def pose(self) -> Pose:
-        return self.locomotion.pose
-
-    def transforms(self) -> dict[str, BoneTransform]:
-        return forward_kinematics(self.layout.skeleton, self.pose())
-
-    def contact(self) -> Vec2:
-        return self.follower.contact()
-
-    def center(self) -> Vec2:
-        """Middle of the body, for aiming at."""
-        return self.transforms()[self.layout.torso].start
-
-    def say(self, message: str) -> None:
-        self.world.say(self, message)
-
-    def hits(self, point: Vec2, margin: float = 0.0) -> bool:
-        transforms = self.transforms()
-        head = transforms[self.layout.head].end
-        scale = self.layout.scale
-        if head.distance_to(point) <= self.layout.head_radius + 2.0 * scale + margin:
-            return True
-        return any(
-            _distance_to_segment(point, t.start, t.end) <= BODY_RADIUS * scale + margin
-            for t in transforms.values()
-        )
-
-    def _track_velocity(self, dt: float) -> None:
-        contact = self.contact()
-        measured = (contact - self._last_contact) / dt if dt > 0 else ZERO
-        self.velocity = self.velocity.lerp(measured, min(1.0, dt * 10.0))
-        self._last_contact = contact
-
-    # ----- terrain -------------------------------------------------------------
-
-    def move_goal_with_box(self, change: TerrainChange) -> None:
-        """Call before the terrain is rebuilt: a goal on a moved box moves with it."""
-        if self.goal is None:
-            return
-        anchor = self.planner.anchor_near(self.goal, 1.0)
-        if anchor is None:
-            return
-        delta = change.delta_for(anchor.surface.box)
-        if delta is not None:
-            self.goal += delta
-
-    def terrain_changed(self, change: TerrainChange) -> None:
-        if self.follower.in_transition:
-            box = _through(self.follower.step.surface.box, self._pending_changes)
-            self._pending_changes.append(change)
-            self.needs_replan = True
-            delta = None if box is _GONE else change.delta_for(box)
-            if delta is not None:
-                self.follower.carry_transition(delta)
-            return
-        old = self.follower.current_anchor()
-        box = old.surface.box
-        delta = change.delta_for(box)
-        if change.removed(box):
-            self.lost_support(old.point + (delta or ZERO))
-            return
-        self.reanchor(delta or ZERO, delta is not None, change.new_index(box))
-
-    def reanchor(self, delta: Vec2, carried: bool, box: int | None = None) -> None:
-        old = self.follower.current_anchor()
-        contact = old.point + delta
-        anchor = self._matching_anchor(old, contact, old.surface.box if box is None else box)
-        if anchor is None:
-            self.lost_support(contact)
-            return
-        if carried:
-            self.locomotion.shift(delta)
-        self.follower.reset(anchor)
-        self.replan()
-
-    def lost_support(self, contact: Vec2) -> None:
-        raise NotImplementedError
-
-    def drop_from(self, start: Vec2) -> None:
-        """Fall from `start` onto the follower's current anchor."""
-        anchor = self.follower.current_anchor()
-        height = max(0.0, anchor.point.y - start.y)
-        duration = math.sqrt(2.0 * height / self.planner.settings.gravity) + 0.2
-        step = RouteStep(Move.DROP, start, anchor.point, duration, anchor.surface, anchor.surface)
-        self.follower.set_route(Route((step,)))
-
-    def _matching_anchor(self, old: Anchor, contact: Vec2, box: int | None) -> Anchor | None:
-        same = [
-            s
-            for s in self.planner.surfaces
-            if s.kind is old.surface.kind and s.box == box and s.contains(contact, 2.0)
-        ]
-        if same:
-            return Anchor(same[0], same[0].closest_point(contact))
-        return self.planner.anchor_near(contact, REANCHOR_DISTANCE)
-
-    # ----- routes --------------------------------------------------------------
-
-    def set_goal(self, point: Vec2) -> None:
-        anchor = self.planner.anchor_near(point, GOAL_SNAP)
-        if anchor is None:
-            self.say("Too far from any surface - click closer to a box or the floor")
-            return
-        self.goal = anchor.point
-        if self.follower.in_transition:
-            self.needs_replan = True
-        else:
-            self.replan()
-
-    def replan(self) -> None:
-        if self.goal is None:
-            return
-        start = self.follower.current_anchor()
-        goal = self.planner.anchor_near(self.goal, REANCHOR_DISTANCE)
-        route = self.planner.plan(start, goal) if goal is not None else None
-        self.goal_reachable = route is not None
-        self.follower.reset(start)
-        if route is None:
-            self.say("No route there")
-            return
-        self.follower.set_route(route)
-        moves = " > ".join(dict.fromkeys(step.move.value for step in route.steps)) or "here"
-        self.say(f"Route: {moves}  ({route.duration:.1f}s)")
-
-    def halt(self) -> None:
-        """Drop the current route at the next safe point."""
-        if not self.follower.in_transition:
-            self.follower.reset(self.follower.current_anchor())
-
-    def _replan_if_needed(self) -> None:
-        if self.needs_replan and not self.follower.in_transition:
-            self.needs_replan = False
-            changes, self._pending_changes = self._pending_changes, []
-            old = self.follower.current_anchor()
-            box = old.surface.box
-            if not self.planner.owns(old.surface):
-                box = _through(box, changes)
-            if box is _GONE:
-                self.lost_support(old.point)
-                return
-            self.reanchor(ZERO, carried=False, box=box)
 
 
 class StickMode(Enum):
@@ -767,7 +485,7 @@ class Stickman(Actor):
             world.vials.throw(hand, velocity, hostile, owner=self)
         elif isinstance(weapon, DruidStaff):
             root = self.contact() + Vec2(facing * 4.0 * self.layout.scale, 0.0)
-            root = _out_of_boxes(root, world.boxes)
+            root = out_of_boxes(root, world.boxes)
             if self.foe is not None and not hostile:
                 point = world.closest_part(self.foe, root, through_ground=True) or point
             world.spells.vine(root, self.foe, point, hostile, owner=self)

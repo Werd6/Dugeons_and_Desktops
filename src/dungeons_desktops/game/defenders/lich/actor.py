@@ -30,13 +30,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
-from dungeons_desktops.game.actors.mortal import LICH_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.defenders.lich.spells import SPELLS
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+LICH_HP = 6
 
 HEIGHT = 44.0
 """Feet to the top of his skull (the crown stands above that)."""

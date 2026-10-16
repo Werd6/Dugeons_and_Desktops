@@ -44,7 +44,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp
-from dungeons_desktops.game.actors.mortal import HYDRA_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers.actor import surface_below
 from dungeons_desktops.game.defenders.dragon.actor import Flame, climbing_wall
 from dungeons_desktops.game.effects.breath import Mote, splash, step_motes
@@ -55,6 +55,8 @@ from dungeons_desktops.rig.ik import two_bone_points
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+HYDRA_HP = 20
 
 RADII = (14.0, 17.0, 18.0, 18.0, 16.0, 12.0, 9.0, 7.0, 5.5, 4.0)
 """Per segment, chest first: the torso (0-4) and a short tapering tail."""

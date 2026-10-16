@@ -37,10 +37,12 @@ from collections.abc import Sequence
 
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.windows import WindowRecord, WindowSource, WindowTracker
-from dungeons_desktops.game.actors.mortal import DROW_HP, KOBOLD_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.game.adventurers.actor import Stickman, surface_below
 from dungeons_desktops.game.defenders.drakes.drake import COLOURS
+from dungeons_desktops.game.defenders.drakes.kobold import KOBOLD_HP
+from dungeons_desktops.game.defenders.drow.actor import DROW_HP
 from dungeons_desktops.game.defenders.goblins.actor import PACK, Goblin
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import Anchor

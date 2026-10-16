@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.game.adventurers.actor import MELEE_PUSH, Stickman
+from dungeons_desktops.game.heroes.dio.weapon import HeroTridentAndShield
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.locomotion import LocomotionInput, PoseMode
-from dungeons_desktops.rig.weapons import HeroTridentAndShield
 
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import World

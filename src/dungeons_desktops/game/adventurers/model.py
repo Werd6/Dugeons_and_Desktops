@@ -14,10 +14,7 @@ from dataclasses import dataclass
 from dungeons_desktops.navigation.planner import MoveSettings
 from dungeons_desktops.rig.biped import UP, BipedLayout
 from dungeons_desktops.rig.climb import ClimbSettings
-from dungeons_desktops.rig.ik import IkChain
-from dungeons_desktops.rig.skeleton import BoneDef, Skeleton
-from dungeons_desktops.rig.walk import WalkSettings
-from dungeons_desktops.rig.weapons import (
+from dungeons_desktops.rig.equipment import (
     Axe,
     Bombs,
     Bow,
@@ -31,6 +28,9 @@ from dungeons_desktops.rig.weapons import (
     Wand,
     Weapon,
 )
+from dungeons_desktops.rig.ik import IkChain
+from dungeons_desktops.rig.skeleton import BoneDef, Skeleton
+from dungeons_desktops.rig.walk import WalkSettings
 
 SCALE = 0.5
 

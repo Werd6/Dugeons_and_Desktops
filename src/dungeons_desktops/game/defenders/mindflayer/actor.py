@@ -28,13 +28,15 @@ from enum import Enum
 from dungeons_desktops.core.geometry import Vec2
 from dungeons_desktops.game.actors.floating import Floater
 from dungeons_desktops.game.actors.hunting import nearest
-from dungeons_desktops.game.actors.mortal import MIND_FLAYER_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.game.adventurers.actor import Stickman, World
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.biped import UP
 from dungeons_desktops.rig.ragdoll import Ragdoll
 from dungeons_desktops.rig.skeleton import Pose, mirror_pose
+
+MIND_FLAYER_HP = 9
 
 FLOAT_PACE = 0.7
 """How fast it gets through its routes, relative to a stickman walking."""

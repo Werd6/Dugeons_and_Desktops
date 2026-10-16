@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPolygonF, QRadialGrad
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
 from dungeons_desktops.game.adventurers.actor import Stickman
+from dungeons_desktops.game.adventurers.render import draw_body
 from dungeons_desktops.game.defenders.displacer.actor import along
 from dungeons_desktops.game.defenders.displacer.render import _ik, _smooth, _tapered
 from dungeons_desktops.game.defenders.drakes.drake import Missile
@@ -29,7 +30,8 @@ from dungeons_desktops.game.defenders.drow.actor import (
     Lizard,
 )
 from dungeons_desktops.game.defenders.drow.darkness import GLOBE_RADIUS, GROW_TIME, Darkness
-from dungeons_desktops.render.draw import draw_body, draw_strokes, qt, world_pen
+from dungeons_desktops.render.equipment import draw_strokes
+from dungeons_desktops.render.primitives import qt, world_pen
 
 SCALES = QColor(44, 112, 118)
 SCALES_DARK = QColor(26, 72, 80)

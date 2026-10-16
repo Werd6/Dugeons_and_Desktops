@@ -24,13 +24,15 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp, wrap_angle
-from dungeons_desktops.game.actors.mortal import WORM_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers.actor import WORM_DAMAGE
 from dungeons_desktops.navigation.terrain import TerrainChange
 
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+WORM_HP = 4
 
 GRAVITY = 900.0
 SEGMENTS = 22

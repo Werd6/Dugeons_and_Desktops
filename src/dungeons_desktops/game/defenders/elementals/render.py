@@ -44,7 +44,8 @@ from dungeons_desktops.game.defenders.elementals.powers import (
     Shockwave,
     Wave,
 )
-from dungeons_desktops.render.draw import draw_fire, qt, world_pen
+from dungeons_desktops.render.effects import draw_fire
+from dungeons_desktops.render.primitives import qt, world_pen
 
 FIRE_DEEP = QColor(206, 82, 22)
 FIRE = QColor(242, 146, 36)

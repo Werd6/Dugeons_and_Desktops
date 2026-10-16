@@ -50,7 +50,7 @@ from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp, smoothstep, wrap_angle
 from dungeons_desktops.game.actors.hunting import nearest
-from dungeons_desktops.game.actors.mortal import DISPLACER_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.actors.movement import RouteFollower
 from dungeons_desktops.navigation.planner import (
     ALONG_MOVES,
@@ -66,6 +66,8 @@ from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+DISPLACER_HP = 14
 
 GRAVITY = 1100.0
 BODY_HEIGHT = 13.0

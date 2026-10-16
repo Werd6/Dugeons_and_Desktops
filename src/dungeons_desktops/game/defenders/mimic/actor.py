@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
 from dungeons_desktops.game.actors.hunting import Hunt
-from dungeons_desktops.game.actors.mortal import MIMIC_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.actors.movement import RouteFollower
 from dungeons_desktops.game.defenders.mimic.legs import LegRig
 from dungeons_desktops.navigation.planner import (
@@ -62,6 +62,8 @@ from dungeons_desktops.rig.skeleton import Pose, forward_kinematics
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+MIMIC_HP = 8
 
 GRAVITY = 1100.0
 CHEST_WIDTH = 20.0

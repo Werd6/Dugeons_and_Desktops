@@ -26,7 +26,7 @@ import math
 
 from dungeons_desktops.core.geometry import Vec2
 from dungeons_desktops.game.actors.hunting import Hunt
-from dungeons_desktops.game.actors.mortal import GOBLIN_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers.actor import (
     GOAL_SNAP,
     GOBLIN_DAMAGE,
@@ -35,15 +35,17 @@ from dungeons_desktops.game.adventurers.actor import (
     World,
     surface_below,
 )
-from dungeons_desktops.game.adventurers.alchemy import lob_velocity
 from dungeons_desktops.game.defenders.goblins import model as goblin
 from dungeons_desktops.game.defenders.goblins.spears import GRAVITY as SPEAR_GRAVITY
+from dungeons_desktops.game.defenders.goblins.weapons import Banner, GoblinSword, SpearThrower
+from dungeons_desktops.game.effects.ballistics import lob_velocity
 from dungeons_desktops.navigation.planner import Anchor, Planner
 from dungeons_desktops.navigation.terrain import TerrainChange
 from dungeons_desktops.rig.locomotion import LocomotionInput, PoseMode
 from dungeons_desktops.rig.ragdoll import Ragdoll
 from dungeons_desktops.rig.skeleton import Pose
-from dungeons_desktops.rig.weapons import Banner, GoblinSword, SpearThrower
+
+GOBLIN_HP = 5
 
 KINDS = ("sword", "spear", "flag")
 PACK = (

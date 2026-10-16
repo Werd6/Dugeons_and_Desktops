@@ -11,6 +11,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter
 
 from dungeons_desktops.core.geometry import Vec2, smoothstep
+from dungeons_desktops.game.defenders.dragon.render import (
+    DRAGON_PALETTES,
+    OUTLINE,
+    DragonPalette,
+    _draw_dragon_head,
+)
 from dungeons_desktops.game.defenders.drakes.drake import BLAST_TIME, Drake, DrakeLeg, Missile
 from dungeons_desktops.game.defenders.drakes.kobold import Kobold, Traps
 from dungeons_desktops.game.effects.render import (
@@ -23,16 +29,8 @@ from dungeons_desktops.game.effects.render import (
     GAS,
     GAS_YOUNG,
 )
-from dungeons_desktops.render.draw import (
-    DRAGON_PALETTES,
-    FLAME_HOT,
-    FLAME_MID,
-    OUTLINE,
-    DragonPalette,
-    _draw_dragon_head,
-    qt,
-    world_pen,
-)
+from dungeons_desktops.render.effects import FLAME_HOT, FLAME_MID
+from dungeons_desktops.render.primitives import qt, world_pen
 
 HEAD_SCALE = 0.84
 SADDLE = QColor(120, 72, 40)

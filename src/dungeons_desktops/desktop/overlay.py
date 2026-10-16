@@ -44,13 +44,18 @@ from dungeons_desktops.game.defenders.mimic.render import WOOD_LIGHT, draw_mimic
 from dungeons_desktops.game.defenders.minotaur.render import HIDE_LIGHT
 from dungeons_desktops.game.defenders.ooze.render import BODY as OOZE_BODY
 from dungeons_desktops.game.defenders.ooze.render import draw_oozes
-from dungeons_desktops.render.draw import (
+from dungeons_desktops.render.hud import (
+    HEALTH_BAR_HEIGHT,
+    draw_health_bar,
+    draw_kill_counter,
+    draw_kill_marks,
+)
+from dungeons_desktops.render.scene import (
     DRAGON_SKIN,
     FLAYER_ROBE,
     GOBLIN_EYE,
     GOBLIN_HEAD,
     GOBLIN_SKIN,
-    HEALTH_BAR_HEIGHT,
     HERO_SILVER,
     OUTLINE,
     WORM_SKIN,
@@ -61,10 +66,7 @@ from dungeons_desktops.render.draw import (
     draw_dragon,
     draw_fallen,
     draw_gore,
-    draw_health_bar,
     draw_holes,
-    draw_kill_counter,
-    draw_kill_marks,
     draw_mindflayers,
     draw_minotaurs,
     draw_projectiles,

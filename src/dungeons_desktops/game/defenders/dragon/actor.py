@@ -19,7 +19,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
-from dungeons_desktops.game.actors.mortal import DRAGON_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers.actor import DRAGON_DAMAGE
 from dungeons_desktops.game.effects.breath import (
     BREATHS,
@@ -36,6 +36,8 @@ from dungeons_desktops.rig.locomotion import PoseMode
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+DRAGON_HP = 15
 
 SCALE = 1.0
 BODY_LENGTH = 34.0 * SCALE

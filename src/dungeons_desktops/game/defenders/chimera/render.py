@@ -12,7 +12,8 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPolygonF
 
 from dungeons_desktops.core.geometry import Vec2, smoothstep
 from dungeons_desktops.game.defenders.chimera.actor import Chimera, Leg
-from dungeons_desktops.render.draw import draw_fire, qt, world_pen
+from dungeons_desktops.render.effects import draw_fire
+from dungeons_desktops.render.primitives import qt, world_pen
 from dungeons_desktops.rig.ik import two_bone_points
 
 LION = QColor(204, 166, 108)

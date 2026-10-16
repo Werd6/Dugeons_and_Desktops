@@ -5,10 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from dungeons_desktops.core.geometry import Rect, Vec2, clamp
+from dungeons_desktops.core.geometry import Rect, Vec2
+from dungeons_desktops.game.effects.ballistics import (
+    GRAVITY,
+)
 
-GRAVITY = 600.0
 SUBSTEP = 3.0
+
+
+def _blocked(point: Vec2, boxes: Sequence[Rect], floor_y: float) -> bool:
+    return point.y >= floor_y or any(box.contains(point) for box in boxes)
 
 
 @dataclass
@@ -30,80 +36,6 @@ class Explosion:
     hostile: bool = False
     age: float = 0.0
     owner: object = None
-
-
-def _blocked(point: Vec2, boxes: Sequence[Rect], floor_y: float) -> bool:
-    return point.y >= floor_y or any(box.contains(point) for box in boxes)
-
-
-def lob_velocity(
-    origin: Vec2,
-    target: Vec2,
-    target_velocity: Vec2,
-    boxes: Sequence[Rect],
-    floor_y: float,
-    gravity: float = GRAVITY,
-    pace: float = 1.0,
-) -> Vec2:
-    """Launch velocity that lands on the target, leading it. Tries flatter arcs first
-    and lofts higher until the path clears every box (the flattest if none does).
-    `pace` scales every flight time: below 1 throws harder and flatter (arc height
-    goes with its square)."""
-    lobs = _lobs(origin, target, target_velocity, gravity, pace)
-    for velocity, flight in lobs:
-        if _path_clear(origin, velocity, flight * 0.92, boxes, floor_y, gravity):
-            return velocity
-    return lobs[0][0]
-
-
-def has_clear_lob(
-    origin: Vec2,
-    target: Vec2,
-    target_velocity: Vec2,
-    boxes: Sequence[Rect],
-    floor_y: float,
-    gravity: float = GRAVITY,
-    pace: float = 1.0,
-) -> bool:
-    """Whether any arc `lob_velocity` tries gets there without hitting a box."""
-    return any(
-        _path_clear(origin, velocity, flight * 0.92, boxes, floor_y, gravity)
-        for velocity, flight in _lobs(origin, target, target_velocity, gravity, pace)
-    )
-
-
-def _lobs(
-    origin: Vec2, target: Vec2, target_velocity: Vec2, gravity: float, pace: float
-) -> list[tuple[Vec2, float]]:
-    """(launch velocity, flight time) for each arc to try, flattest first."""
-    distance = origin.distance_to(target)
-    base = clamp(0.45 + distance / 450.0, 0.5, 1.3)
-    lobs = []
-    for extra in (0.0, 0.2, 0.4, 0.6, 0.8):
-        flight = (base + extra) * pace
-        aim = target + target_velocity * flight
-        velocity = Vec2(
-            (aim.x - origin.x) / flight, (aim.y - origin.y) / flight - 0.5 * gravity * flight
-        )
-        lobs.append((velocity, flight))
-    return lobs
-
-
-def _path_clear(
-    origin: Vec2,
-    velocity: Vec2,
-    duration: float,
-    boxes: Sequence[Rect],
-    floor_y: float,
-    gravity: float,
-) -> bool:
-    steps = 40
-    for i in range(1, steps + 1):
-        t = duration * i / steps
-        point = origin + velocity * t + Vec2(0.0, 0.5 * gravity * t * t)
-        if _blocked(point, boxes, floor_y):
-            return False
-    return True
 
 
 class Vials:

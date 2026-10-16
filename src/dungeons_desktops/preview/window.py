@@ -21,7 +21,8 @@ from dungeons_desktops.game.defenders.mimic.render import draw_mimics
 from dungeons_desktops.game.defenders.ooze.render import draw_oozes
 from dungeons_desktops.navigation.planner import Move
 from dungeons_desktops.preview.controller import RigPreviewController
-from dungeons_desktops.render.draw import (
+from dungeons_desktops.render.hud import draw_kill_marks
+from dungeons_desktops.render.scene import (
     BACKGROUND,
     GROUND,
     draw_actors,
@@ -32,7 +33,6 @@ from dungeons_desktops.render.draw import (
     draw_fallen,
     draw_gore,
     draw_holes,
-    draw_kill_marks,
     draw_mindflayers,
     draw_minotaurs,
     draw_projectiles,

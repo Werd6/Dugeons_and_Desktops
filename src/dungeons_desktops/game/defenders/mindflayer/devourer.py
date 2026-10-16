@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
 from dungeons_desktops.game.actors.hunting import Hunt
-from dungeons_desktops.game.actors.mortal import DEVOURER_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.actors.movement import RouteFollower
 from dungeons_desktops.game.defenders.goblins import model as goblin
 from dungeons_desktops.navigation.planner import ALONG_MOVES, Anchor, Move, Planner
@@ -25,6 +25,8 @@ from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+DEVOURER_HP = 3
 
 GRAVITY = 900.0
 CRAWL_SPEED = {Move.WALK: 95.0, Move.CLIMB: 70.0, Move.HANG: 70.0}

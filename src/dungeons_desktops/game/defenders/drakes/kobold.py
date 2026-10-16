@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp
-from dungeons_desktops.game.actors.mortal import KOBOLD_HP, Mortal
+from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.defenders.drakes.drake import (
     ARROW_GRAVITY,
     ARROW_SPEED,
@@ -34,6 +34,8 @@ from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
     from dungeons_desktops.game.world.simulation import SimWorld
+
+KOBOLD_HP = 2
 
 LEG = 4.5
 """Hip height."""
