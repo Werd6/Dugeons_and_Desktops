@@ -11,7 +11,7 @@ MONSTER_KILLS_REQUIRED = 100
 WORM_KILLS_REQUIRED = 100
 LEGENDARY_HERO_KILLS = 5
 """How many times a class-path monster's named hero must die before its legendary unlocks."""
-GOBLIN_DEATHS_REQUIRED = 500
+GOBLIN_DEATHS_REQUIRED = 1000
 """Individual goblin bodies that must fall for the Goblin King."""
 WORM_LEGENDARY_KILLS = 10_000
 """Adventurer kills required for the Devourer after the worm itself is unlocked."""

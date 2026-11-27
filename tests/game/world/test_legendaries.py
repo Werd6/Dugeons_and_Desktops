@@ -63,7 +63,7 @@ def test_catalog_lists_all_legendaries_without_pending_starters():
     assert len(legendaries) == len(LEGENDARY_BY_DEFENDER) == 14
     assert not any(unlock.pending for unlock in legendaries)
     assert LEGENDARY_HERO_KILLS == 5
-    assert GOBLIN_DEATHS_REQUIRED == 500
+    assert GOBLIN_DEATHS_REQUIRED == 1000
     assert WORM_LEGENDARY_KILLS == 10_000
     assert HERO_UNLOCK_COUNT == OTHER_LEGENDARY_COUNT - 3 == 10
     assert legendary_name("minotaur") == LEGENDARY_NAMES["minotaur"] == "Labyrinth King"
