@@ -7,7 +7,7 @@
   #define MyAppVersion "0.1.0"
 #endif
 #define MyAppPublisher "Werd6"
-#define MyAppURL "https://github.com/Werd6/Dugeons_and_Desktops"
+#define MyAppURL "https://github.com/Werd6/Dungeons_and_Desktops"
 #define MyAppExeName "Dungeons and Desktops.exe"
 
 [Setup]

@@ -16,7 +16,7 @@ Product notes and deep design live in [docs/PRD.md](docs/PRD.md). Marketing page
 
 ## Download
 
-Prebuilt apps: [dev release](https://github.com/Werd6/Dugeons_and_Desktops/releases/tag/dev)
+Prebuilt apps: [dev release](https://github.com/Werd6/Dungeons_and_Desktops/releases/tag/dev)
 
 - **macOS:** `Dungeons-and-Desktops-macOS.zip` — unzip and open (signed + notarized in CI).
 - **Windows:** `Dungeons-and-Desktops-Windows-Setup.exe` — run the installer. If SmartScreen warns, More info → Run anyway.
