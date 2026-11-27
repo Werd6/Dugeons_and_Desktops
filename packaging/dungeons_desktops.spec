@@ -10,6 +10,9 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = Path(SPECPATH).resolve().parent
 SRC = ROOT / "src"
+ICONS = ROOT / "packaging" / "icons"
+APP_ICNS = ICONS / "app.icns"
+APP_ICO = ICONS / "app.ico"
 
 datas: list = []
 binaries: list = []
@@ -79,6 +82,9 @@ pyz = PYZ(a.pure)
 
 # Prefer signing via packaging/macos/sign_and_notarize.sh after the build
 # (deep + hardened runtime + notarization). Leave PyInstaller's identity empty.
+_exe_icon = str(APP_ICNS) if sys.platform == "darwin" and APP_ICNS.exists() else (
+    str(APP_ICO) if APP_ICO.exists() else None
+)
 exe = EXE(
     pyz,
     a.scripts,
@@ -95,6 +101,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=_exe_icon,
 )
 
 coll = COLLECT(
@@ -111,12 +118,13 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="Dungeons and Desktops.app",
-        icon=None,
+        icon=str(APP_ICNS) if APP_ICNS.exists() else None,
         bundle_identifier="com.werd6.dungeons-and-desktops",
         info_plist={
             "CFBundleName": "Dungeons & Desktops",
             "CFBundleDisplayName": "Dungeons & Desktops",
             "CFBundleShortVersionString": "0.1.0",
+            "CFBundleIconFile": "app.icns",
             "NSHighResolutionCapable": True,
             "LSUIElement": True,
         },
