@@ -116,6 +116,37 @@ def test_it_climbs_a_wall_to_get_at_prey_on_a_higher_window():
     assert not man.prey
 
 
+def test_it_climbs_a_narrow_slot_without_belly_crawling():
+    """A tight gutter between windows used to squash the body flat against the wall.
+    Walls stay whole and the body keeps its hip height, clipping the neighbor."""
+    from dungeons_desktops.game.defenders.chimera.lion import HIP_HEIGHT
+
+    gap = 22.0
+    left = Rect(200, 300, 280, 400)
+    right = Rect(200 + 280 + gap, 300, 300, 400)
+    world = SimWorld([left, right], 900.0, 1400.0, ceiling=0.0, seed=4)
+    wall_x = left.right
+    walls = [
+        s
+        for s in world.chimera_planner.surfaces
+        if s.wall and s.box == 0 and abs(s.start.x - wall_x) < 0.5
+    ]
+    assert walls, "narrow slot still has a climbable side"
+    assert max(s.length for s in walls) > 200.0, "wall is not truncated by clearance"
+
+    chimera = world.add_chimera(Vec2(100, 900), 1)
+    calm(chimera, lion=False)
+    # Plant it mid-wall in the slot and settle one frame.
+    wall = max(walls, key=lambda s: s.length)
+    chimera.prowl._attach(world.chimera_planner.anchor_at(wall, wall.low + wall.length * 0.5))
+    run(world, STEP)
+    support = chimera.support
+    assert support is not None and not support.walkable
+    # Body sits a full hip-height out from the wall — not crushed into it by the neighbor.
+    out = (chimera.body - chimera.prowl.position).dot(support.normal)
+    assert abs(out - HIP_HEIGHT) < 1.5
+
+
 def test_its_planted_feet_stay_on_its_surface():
     world, chimera = on_window(facing=1)
     run(world, 1.0)
@@ -271,3 +302,32 @@ def test_it_can_be_hit_and_slumps_when_killed():
     assert abs(chimera.body.y - (WINDOW.top - 7.0)) < 1.0
     run(world, 10.0)
     assert chimera not in world.fallen
+
+
+def test_primal_heads_breathe_different_colored_fire():
+    from dungeons_desktops.game.defenders.chimera.goat import Fire
+
+    world = SimWorld([], 900.0, 1400.0, ceiling=0.0, seed=5)
+    chimera = world.add_chimera(Vec2(700, 900), 1, legendary=True)
+    calm(chimera, lion=True, goat=False)
+    chimera.lion_breath.state = chimera.snake_breath.state = Fire.COOLDOWN
+    chimera.lion_breath.timer = chimera.snake_breath.timer = 1000.0
+    chimera.prowl.turn_wait = 1000.0
+    world.add_stickman(Vec2(450, 900))
+
+    def watching_goat():
+        return bool(chimera.goat.flames)
+
+    run(world, 4.0, watching_goat)
+    assert chimera.goat.flames
+    assert all(f.palette == "blue" for f in chimera.goat.flames)
+
+    # Force lion and snake breaths so we don't wait on their cooldowns/AI.
+    for breath, tint in ((chimera.lion_breath, "orange"), (chimera.snake_breath, "green")):
+        breath.state = Fire.BREATHE
+        breath.timer = 0.2
+        breath.aim = chimera.forward
+        breath.flames.clear()
+        breath.update(STEP, chimera)
+        assert breath.flames
+        assert all(f.palette == tint for f in breath.flames)

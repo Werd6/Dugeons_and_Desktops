@@ -17,7 +17,7 @@ class Mortal:
     down_time = 0.0
 
     @property
-    def hp(self) -> int:
+    def hp(self) -> float:
         return max(0, self.max_hp - self.damage)
 
     @property

@@ -16,6 +16,7 @@ from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
 from dungeons_desktops.game.defenders.lich.spells import (
     ARC_TIME,
     BLAST_TIME,
+    CLOUD_RADIUS,
     FIREBALL_RADIUS,
     SCORCH_TIME,
     SMITE_DROP,
@@ -27,6 +28,7 @@ from dungeons_desktops.game.defenders.lich.spells import (
     WORD_TIME,
     Arc,
     Blast,
+    Cloudkill,
     Dart,
     Fireball,
     Necromancy,
@@ -101,6 +103,8 @@ def draw_necromancy(painter: QPainter, necromancy: Necromancy) -> None:
     painter.save()
     for patch in necromancy.tentacles:
         _tentacles(painter, patch)
+    for cloud in necromancy.cloudkills:
+        _cloudkill(painter, cloud)
     for word in necromancy.words:
         _word(painter, word)
     for wisp in necromancy.wisps:
@@ -116,6 +120,26 @@ def draw_necromancy(painter: QPainter, necromancy: Necromancy) -> None:
     for smite in necromancy.smites:
         _smite(painter, smite)
     painter.restore()
+
+
+def _cloudkill(painter: QPainter, cloud: Cloudkill) -> None:
+    strength = cloud.strength
+    if strength <= 0.0:
+        return
+    rng = random.Random(int(cloud.center.x * 17 + cloud.center.y * 11))
+    for k in range(32):
+        angle = rng.uniform(0.0, math.tau)
+        reach = CLOUD_RADIUS * math.sqrt(rng.random()) * strength
+        drift = Vec2(math.sin(cloud.age * 0.8 + k) * 5.0, -cloud.age * (2.0 + k % 3))
+        center = cloud.center + Vec2.from_angle(angle, reach) + drift
+        radius = rng.uniform(18.0, 36.0) * (0.55 + 0.45 * strength)
+        mist = QRadialGradient(_qt(center), radius)
+        mist.setColorAt(0.0, _alpha(QColor(92, 178, 62), 110 * strength))
+        mist.setColorAt(0.55, _alpha(QColor(48, 112, 42), 78 * strength))
+        mist.setColorAt(1.0, _alpha(QColor(32, 82, 30), 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(mist)
+        painter.drawEllipse(_qt(center), radius, radius * 0.72)
 
 
 def _fireball(painter: QPainter, ball: Fireball) -> None:

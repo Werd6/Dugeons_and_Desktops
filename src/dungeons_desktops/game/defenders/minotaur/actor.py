@@ -44,6 +44,7 @@ import math
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.defenders.minotaur.combat import (
     Thrown,
@@ -73,6 +74,8 @@ if TYPE_CHECKING:
     from dungeons_desktops.game.world.simulation import SimWorld
 
 MINOTAUR_HP = 26
+LABYRINTH_SIZE = 1.3
+"""How much larger the Labyrinth King is drawn and fought than a common bull."""
 
 GRAVITY = 1250.0
 HEIGHT = 64.0
@@ -219,9 +222,9 @@ THROW_TIMES = (0.22, 0.28, 0.16, 0.3)
 THROW_DAMAGE = 8
 """Its hardest blow: the adventurer it throws hits someone farther off for this."""
 THROW_PUSH = 460.0
-THROW_COOLDOWN = 2.0
+THROW_COOLDOWN = 1.0
 THROW_HIT = 14.0
-THROW_SELF = 3
+THROW_SELF = 10
 """What the hurled adventurer himself takes when he lands."""
 GRAB_REACH = 30.0
 THROW_MIN = 72.0
@@ -313,6 +316,10 @@ class Minotaur(Mortal):
         self.speed = 0.0
         """Along a walk (+x right)."""
         self.facing = heading
+        self.size = 1.0
+        """Drawn and fought scale; Labyrinth King grows to `LABYRINTH_SIZE`."""
+        self.legendary = False
+        self._legendary_scaled = False
         self.turn_left = 0.0
         self.route: list[RouteStep] = []
         self.goal: Vec2 | None = None
@@ -604,20 +611,25 @@ class Minotaur(Mortal):
         ]
 
     def hits(self, point: Vec2, margin: float = 0.0) -> bool:
+        # Match the Labyrinth King's larger drawn silhouette.
+        scale = self.size
         head = self.to_world(self.local(HEAD))
-        if head.distance_to(point) <= HEAD_RADIUS + margin:
+        if head.distance_to(point) <= HEAD_RADIUS * scale + margin:
             return True
         waist = self.to_world(self.local(WAIST))
         chest = self.to_world(self.local(SHOULDER))
-        if _segment_distance(point, self.to_world(self.local(NECK)), head) <= NECK_RADIUS + margin:
+        if (
+            _segment_distance(point, self.to_world(self.local(NECK)), head)
+            <= NECK_RADIUS * scale + margin
+        ):
             return True
-        if _segment_distance(point, waist, chest) <= TORSO_RADIUS + margin:
+        if _segment_distance(point, waist, chest) <= TORSO_RADIUS * scale + margin:
             return True
-        if self.to_world(self.local(BACK)).distance_to(point) <= BACK_RADIUS + margin:
+        if self.to_world(self.local(BACK)).distance_to(point) <= BACK_RADIUS * scale + margin:
             return True
         hips = self.to_world(self.local(Vec2(0.0, -HIP_HEIGHT)))
         return any(
-            _segment_distance(point, self.to_world(foot), hips) <= LEG_RADIUS + margin
+            _segment_distance(point, self.to_world(foot), hips) <= LEG_RADIUS * scale + margin
             for foot in STANCE
         )
 
@@ -646,6 +658,7 @@ class Minotaur(Mortal):
     # ----- update -------------------------------------------------------------------
 
     def update(self, dt: float) -> None:
+        self._apply_legendary_size()
         self.time += dt
         self._timers(dt)
         if self.flight is not None:
@@ -662,14 +675,24 @@ class Minotaur(Mortal):
         self._fly_thrown(dt)
         self._escape()
 
+    def _apply_legendary_size(self) -> None:
+        """Legendary status is applied by spawning after construction."""
+        if self._legendary_scaled or not self.legendary:
+            return
+        self._legendary_scaled = True
+        self.size = LABYRINTH_SIZE
+
     def _timers(self, dt: float) -> None:
         rate = RAGE_COOLDOWN if self.enraged else 1.0
         self.charge_wait -= dt * rate
         self.attack_wait -= dt * rate
         self.throw_wait -= dt * rate
         self._ground_for = max(0.0, self._ground_for - dt)
+        was_enraged = self.rage_left > 0.0
         self.rage_left = max(0.0, self.rage_left - dt)
         if self.rage_left <= 0.0:
+            if was_enraged and getattr(self, "legendary", False):
+                self.damage = max(0, self.damage - 3)
             self.provoker = None
         self.fury = _approach(self.fury, 1.0 if self.enraged else 0.0, dt * 3.0)
         if self.turn_left > 0.0:
@@ -820,6 +843,12 @@ class Minotaur(Mortal):
         # Only those it can get at, if anyone: whoever's out of reach (up a wall it can't
         # climb, hanging under a window) is dropped, the current foe after a moment.
         reachable = [s for s in prey if self._reachable(s)]
+        guards = priority_prey([
+            s for s in reachable if getattr(s, "target_priority", 0)
+        ])
+        if guards:
+            self._out_of_reach = 0.0
+            return min(guards, key=lambda s: s.center().distance_to(center))
         current = self.foe
         if current in prey and current not in reachable and reachable:
             self._out_of_reach += dt
@@ -1739,19 +1768,24 @@ class Minotaur(Mortal):
         return min(near, key=lambda man: abs(self._ahead(man)))
 
     def _throw_target(self, victim: Stickman) -> Stickman | None:
-        far = [
-            man
-            for man in self.world.stickmen
-            if man.prey
-            and man is not victim
-            and THROW_MIN <= self._ahead(man) <= THROW_MAX
-            and abs(man.contact().y - self.position.y) <= 80.0
-        ]
+        if getattr(self, "legendary", False):
+            far = [man for man in self.world.stickmen if man.prey and man is not victim]
+        else:
+            far = [
+                man
+                for man in self.world.stickmen
+                if man.prey
+                and man is not victim
+                and THROW_MIN <= self._ahead(man) <= THROW_MAX
+                and abs(man.contact().y - self.position.y) <= 80.0
+            ]
         if not far:
             return None
         foe = self.foe
         if foe in far:
             return foe
+        if getattr(self, "legendary", False):
+            return min(far, key=lambda man: abs(self._ahead(man)))
         return min(far, key=self._ahead)
 
     def grip(self, t: float | None = None) -> Vec2:
@@ -1801,7 +1835,8 @@ class Minotaur(Mortal):
         velocity = lob_velocity(
             origin, aim, ZERO, self.world.boxes, self.world.floor_y, HURL_GRAVITY, pace=0.55
         )
-        self._thrown = Thrown(man, origin, velocity, self.position.y)
+        ground = self.world.floor_y if getattr(self, "legendary", False) else self.position.y
+        self._thrown = Thrown(man, origin, velocity, ground)
         self._caught = None
         man.paralyze(1.6)
 
@@ -1815,6 +1850,7 @@ class Minotaur(Mortal):
             return
         age = thrown.age
         thrown.age += dt
+        legendary = getattr(self, "legendary", False)
         steps = 4
         for i in range(1, steps + 1):
             t = age + (thrown.age - age) * i / steps
@@ -1822,12 +1858,15 @@ class Minotaur(Mortal):
             self._pin(man, point)
             if self._thrown_hits(man, point, thrown):
                 return
-            if point.y >= thrown.ground_y - 2.0 or any(
+            # Labyrinth King throws sail through windows and ledges; only the floor stops them.
+            hit_ground = point.y >= thrown.ground_y - 2.0
+            hit_box = (not legendary) and any(
                 box.contains(point) for box in self.world.boxes
-            ):
+            )
+            if hit_ground or hit_box:
                 self._drop_thrown(man, thrown.velocity + Vec2(0.0, HURL_GRAVITY * t))
                 return
-        if thrown.age > 1.5:
+        if thrown.age > (2.4 if legendary else 1.5):
             velocity = thrown.velocity + Vec2(0.0, HURL_GRAVITY * thrown.age)
             self._drop_thrown(man, velocity)
 

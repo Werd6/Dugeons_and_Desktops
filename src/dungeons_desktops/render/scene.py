@@ -19,12 +19,11 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
     QPolygonF,
-    QRadialGradient,
 )
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp, smoothstep
 from dungeons_desktops.game.adventurers.actor import Stickman
-from dungeons_desktops.game.adventurers.alchemy import Vials
+from dungeons_desktops.game.adventurers.alchemy import CLING_DURATION, Vials
 from dungeons_desktops.game.adventurers.render import (
     _draw_vines,
     draw_body,  # noqa: F401 - compatibility export
@@ -44,14 +43,23 @@ from dungeons_desktops.game.defenders.dragon.render import draw_dragon
 from dungeons_desktops.game.defenders.drakes.drake import Drake
 from dungeons_desktops.game.defenders.drakes.kobold import Kobold
 from dungeons_desktops.game.defenders.drow.actor import Drow, Lizard
-from dungeons_desktops.game.defenders.elementals.actor import Elemental
+from dungeons_desktops.game.defenders.aboleth.actor import Aboleth
 from dungeons_desktops.game.defenders.goblins.actor import Goblin
 from dungeons_desktops.game.defenders.goblins.render import draw_goblin
 from dungeons_desktops.game.defenders.goblins.spears import Spears
+from dungeons_desktops.game.defenders.graveknights.actor import Graveknight
+from dungeons_desktops.game.defenders.graveknights.render import draw_graveknight
 from dungeons_desktops.game.defenders.hydra.actor import Hydra
 from dungeons_desktops.game.defenders.hydra.render import draw_hydra
 from dungeons_desktops.game.defenders.lich.actor import Lich
-from dungeons_desktops.game.defenders.lich.render import draw_lich
+from dungeons_desktops.game.defenders.lich.render import draw_lich, draw_palm_flame
+from dungeons_desktops.game.defenders.lich.skeleton_render import (
+    BONE as SKELETON_BONE,
+)
+from dungeons_desktops.game.defenders.lich.skeleton_render import (
+    FAR as SKELETON_FAR,
+)
+from dungeons_desktops.game.defenders.lich.skeleton_render import draw_skeleton_skull
 from dungeons_desktops.game.defenders.lich.skeletons import Skeleton
 from dungeons_desktops.game.defenders.mimic.actor import Mimic
 from dungeons_desktops.game.defenders.mimic.render import draw_mimic
@@ -67,12 +75,13 @@ from dungeons_desktops.game.defenders.mindflayer.render import (
 )
 from dungeons_desktops.game.defenders.minotaur.actor import Minotaur
 from dungeons_desktops.game.defenders.minotaur.render import draw_minotaur
-from dungeons_desktops.game.defenders.ooze.actor import Ooze
 from dungeons_desktops.game.defenders.worm.actor import Worm
 from dungeons_desktops.game.defenders.worm.render import draw_worm
+from dungeons_desktops.game.defenders.zombies.actor import Zombie
+from dungeons_desktops.game.defenders.zombies.render import draw_zombie
 from dungeons_desktops.game.effects.debris import HOLE_FADE, HOLE_LIFE, Debris, Hole
 from dungeons_desktops.game.effects.fire import Burn
-from dungeons_desktops.game.effects.flames import FLAME_LIFE, Flame
+from dungeons_desktops.game.effects.flames import Flame
 from dungeons_desktops.game.effects.gore import DROP_LIFE, SPLAT_LIFE, Gore
 from dungeons_desktops.game.effects.projectiles import Projectiles
 from dungeons_desktops.game.effects.render import (
@@ -80,9 +89,13 @@ from dungeons_desktops.game.effects.render import (
     draw_demise_under,
     melted,
 )
-from dungeons_desktops.game.heroes.dio.render import draw_dio_effects  # noqa: F401
+from dungeons_desktops.game.heroes.hero_fighter.render import (  # noqa: F401
+    draw_hero_fighter_effects,
+)
+from dungeons_desktops.game.heroes.hero_paladin.render import draw_aura, draw_halo
 from dungeons_desktops.game.world.simulation import KILL_MARK_TIME, KillMark
 from dungeons_desktops.navigation.terrain import Surface
+from dungeons_desktops.render.chromatic import chromatic_appearance
 from dungeons_desktops.rig.skeleton import BoneTransform
 
 BACKGROUND = QColor(24, 26, 33)
@@ -110,6 +123,10 @@ WEAPON_COLORS = {
     "magic": QColor(196, 120, 255),
     "orb": QColor(255, 110, 176),
     "holy": QColor(252, 250, 240),
+    "sun_wood": QColor(137, 86, 45),
+    "sun_glow": QColor(255, 213, 92, 75),
+    "sun_gold": QColor(255, 205, 70),
+    "sun_core": QColor(255, 255, 232),
     "string": QColor(228, 222, 204),
     "shield": QColor(52, 84, 156),
     "hero_shield": QColor(36, 48, 62),
@@ -128,6 +145,9 @@ MAGIC = QColor(176, 96, 255)
 MAGIC_CORE = QColor(244, 226, 255)
 FIRE_SPARK = QColor(255, 124, 48)
 FIRE_SPARK_CORE = QColor(255, 244, 180)
+LIFE_LIGHTNING = QColor(229, 32, 54)
+LIFE_LIGHTNING_CORE = QColor(255, 92, 105)
+LIFE_LIGHTNING_VOID = QColor(10, 4, 9)
 SCARF = QColor(255, 214, 234)
 SCARF_EDGE = QColor(168, 52, 108)
 HOLY = QColor(255, 255, 248)
@@ -146,9 +166,6 @@ HERO_PLATE = QColor(118, 132, 146)
 HERO_PLATE_DARK = QColor(31, 48, 44)
 HERO_SILVER = QColor(214, 226, 234)
 HERO_ARMOR_EDGE = QColor(22, 28, 38)
-HERO_WING = QColor(214, 226, 234, 210)
-HERO_WING_FAR = QColor(148, 164, 180, 160)
-HERO_WING_BONE = QColor(238, 244, 248)
 CLASS_COLORS = {
     "barbarian": (QColor(238, 138, 54), QColor(160, 90, 36)),
     "paladin": (QColor(252, 224, 92), QColor(172, 150, 58)),
@@ -166,6 +183,7 @@ CLASS_COLORS = {
 SPARK_COLORS = {
     "magic": MAGIC,
     "fire": FIRE_SPARK,
+    "life_drain": LIFE_LIGHTNING,
     "holy": HOLY,
     "wood": QColor(150, 100, 62),
     "hit": QColor(255, 226, 170),
@@ -176,15 +194,15 @@ GOBLIN_SKIN = QColor(132, 186, 88)
 GOBLIN_FAR = QColor(88, 128, 60)
 GOBLIN_HEAD = QColor(58, 92, 44)
 GOBLIN_EYE = QColor(250, 220, 80)
-SKELETON_BONE = QColor(226, 220, 196)
-SKELETON_FAR = QColor(160, 154, 134)
-SKELETON_SOCKET = QColor(22, 18, 24)
-SKELETON_EYE = QColor(140, 255, 140)
 SKELETON_DIRT = QColor(92, 74, 56)
 BANNER = QColor(150, 30, 34)
 BANNER_EDGE = QColor(60, 14, 16)
 WOUNDED = QColor(230, 60, 60)
 VIAL_RED = QColor(220, 40, 52)
+HERO_VIAL_GREEN = QColor(74, 220, 104)
+CLING_OOZE = QColor(71, 205, 88, 225)
+CLING_OOZE_DARK = QColor(24, 93, 43, 235)
+CLING_OOZE_GLOW = QColor(171, 255, 133, 220)
 VIAL_GLASS = QColor(235, 200, 205)
 VIAL_CORK = QColor(160, 115, 70)
 VIAL_SCALE = 1.1
@@ -291,7 +309,6 @@ DRAGON_PALETTES = {
         QColor(96, 196, 255),
     ),
 }
-"""Wing size relative to the body; the folded wing grows with it."""
 FLAME_HOT = QColor(255, 244, 170)
 FLAME_MID = QColor(255, 150, 40)
 FLAME_SMOKE = QColor(110, 60, 40)
@@ -357,7 +374,8 @@ def draw_actors(
     for goblin in goblins:
         draw_goblin(painter, goblin, outline)
     for stickman in stickmen:
-        painter.setOpacity(1.0 - stickman.fade)
+        draw_aura(painter, stickman)
+        painter.setOpacity((1.0 - stickman.fade) * getattr(stickman, "visibility", 1.0))
         demise = stickman.demise
         squeeze = stickman.squeeze() if demise is None else None
         if squeeze is not None:
@@ -374,6 +392,7 @@ def draw_actors(
         if stickman.burn is not None:
             painter.setOpacity(1.0)
             draw_burn(painter, stickman.burn)
+        draw_halo(painter, stickman)
     painter.setOpacity(1.0)
 
 
@@ -425,6 +444,9 @@ def draw_spells(painter: QPainter, spells: Spells) -> None:
         painter.drawLine(qt(tail), qt(tail + along * 2.0))
     painter.setBrush(Qt.BrushStyle.NoBrush)
     for missile in spells.missiles:
+        if missile.kind == "life_drain":
+            _draw_life_lightning(painter, missile)
+            continue
         color = FIRE_SPARK if missile.kind == "fire" else MAGIC
         core = FIRE_SPARK_CORE if missile.kind == "fire" else MAGIC_CORE
         for trail in missile.darts:
@@ -450,6 +472,36 @@ def draw_spells(painter: QPainter, spells: Spells) -> None:
         t = spark.age / SPARK_LIFE
         painter.setBrush(_alpha(SPARK_COLORS[spark.color], 240 * (1.0 - t)))
         painter.drawEllipse(qt(spark.position), 1.3 * (1.0 - 0.5 * t), 1.3 * (1.0 - 0.5 * t))
+
+
+def _draw_life_lightning(painter: QPainter, missile) -> None:
+    """A fast, crooked black bolt with a blood-red core and short side forks."""
+    progress = clamp(missile.age / missile.flight, 0.0, 1.0)
+    segments = max(5, min(30, round(missile.origin.distance_to(missile.target) / 9.0)))
+    points = [missile.dart(0, progress * index / segments) for index in range(segments + 1)]
+    path = QPainterPath(qt(points[0]))
+    for point in points[1:]:
+        path.lineTo(qt(point))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    for color, width, opacity in (
+        (LIFE_LIGHTNING_VOID, 5.2, 245),
+        (LIFE_LIGHTNING, 2.5, 245),
+        (LIFE_LIGHTNING_CORE, 0.75, 255),
+    ):
+        painter.setPen(world_pen(_alpha(color, opacity), width))
+        painter.drawPath(path)
+
+    direction = (missile.target - missile.origin).normalized()
+    side = direction.rotated(math.pi / 2)
+    for index in range(3, len(points) - 2, 5):
+        root = points[index]
+        sign = -1.0 if index % 2 else 1.0
+        bend = root + direction * 3.0 + side * (sign * 4.0)
+        tip = bend + direction * 4.0 + side * (sign * 5.0)
+        painter.setPen(world_pen(LIFE_LIGHTNING_VOID, 2.8))
+        painter.drawPolyline([qt(root), qt(bend), qt(tip)])
+        painter.setPen(world_pen(LIFE_LIGHTNING, 1.0))
+        painter.drawPolyline([qt(root), qt(bend), qt(tip)])
 
 
 def draw_burn(painter: QPainter, burn: Burn) -> None:
@@ -507,6 +559,7 @@ def draw_skeletons(
         draw_skeleton(painter, skeleton, outline)
 
 
+@chromatic_appearance
 def draw_skeleton(painter: QPainter, skeleton: Skeleton, outline: QColor | None = None) -> None:
     """Bare bones: knobbly limbs, a ribcage, a skull with green pinpoint eyes. Rising,
     it claws its way up out of the ground it stands on."""
@@ -533,14 +586,23 @@ def draw_skeleton(painter: QPainter, skeleton: Skeleton, outline: QColor | None 
         painter.setBrush(outline)
         painter.drawEllipse(qt(head.end), radius + 1.2, radius + 1.2)
     weapon = skeleton.weapon
-    strokes = weapon.strokes(transforms, facing)
-    if not weapon.held:
+    mage = getattr(skeleton, "legendary_mage", False)
+    strokes = [] if mage else weapon.strokes(transforms, facing)
+    if strokes and not weapon.held:
         draw_strokes(painter, strokes)
     _draw_bones(painter, transforms, far, SKELETON_FAR)
     _draw_ribs(painter, transforms[layout.torso], facing)
     _draw_bones(painter, transforms, spine, SKELETON_BONE, knobs=False)
-    _draw_skull(painter, head.end, radius, facing, skeleton.dead)
-    if weapon.held:
+    draw_skeleton_skull(painter, head.end, radius, facing, skeleton.dead)
+    if mage and not skeleton.dead:
+        hand = transforms[weapon.hand_chain.bones[-1]].end
+        draw_palm_flame(
+            painter,
+            hand + Vec2(0.0, -2.2),
+            skeleton.risen + skeleton.mage_cooldown,
+            size=0.5,
+        )
+    elif strokes and weapon.held:
         draw_strokes(painter, strokes)
     _draw_bones(painter, transforms, near, SKELETON_BONE)
     painter.restore()
@@ -587,41 +649,6 @@ def side_sign(up: Vec2, facing: int) -> bool:
     return (Vec2(-up.y, up.x).x >= 0.0) == (facing > 0)
 
 
-def _draw_skull(painter: QPainter, center: Vec2, radius: float, facing: int, dead: bool) -> None:
-    f = float(facing)
-    painter.setPen(pen(SKELETON_FAR, 0.7))
-    painter.setBrush(SKELETON_BONE)
-    painter.drawEllipse(qt(center + Vec2(-0.1 * f * radius, -0.05 * radius)), radius, radius * 0.95)
-    jaw = QRectF(
-        center.x + f * 0.05 * radius - 0.55 * radius,
-        center.y + 0.55 * radius,
-        1.1 * radius,
-        0.55 * radius,
-    )
-    painter.drawRoundedRect(jaw, 1.0, 1.0)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(SKELETON_SOCKET)
-    eye = center + Vec2(f * 0.42 * radius, -0.05 * radius)
-    painter.drawEllipse(qt(eye), 0.32 * radius, 0.36 * radius)
-    painter.drawEllipse(qt(eye + Vec2(-f * 0.55 * radius, 0.0)), 0.22 * radius, 0.32 * radius)
-    painter.drawEllipse(
-        qt(center + Vec2(f * 0.62 * radius, 0.38 * radius)), 0.12 * radius, 0.16 * radius
-    )
-    painter.setPen(pen(SKELETON_SOCKET, 0.5))
-    for k in range(3):
-        x = center.x + f * (0.05 + 0.22 * k) * radius
-        painter.drawLine(QPointF(x, center.y + 0.6 * radius), QPointF(x, center.y + 1.0 * radius))
-    if not dead:
-        glow = QRadialGradient(qt(eye), radius * 0.9)
-        glow.setColorAt(0.0, QColor(110, 255, 140, 150))
-        glow.setColorAt(1.0, QColor(110, 255, 140, 0))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(glow)
-        painter.drawEllipse(qt(eye), radius * 0.9, radius * 0.9)
-        painter.setBrush(SKELETON_EYE)
-        painter.drawEllipse(qt(eye), 0.13 * radius + 0.3, 0.13 * radius + 0.3)
-
-
 def _draw_dirt(painter: QPainter, ground: Vec2, age: float) -> None:
     painter.setPen(Qt.PenStyle.NoPen)
     fade = max(0.0, 1.0 - age / 1.4)
@@ -648,11 +675,16 @@ def draw_spears(painter: QPainter, spears: Spears) -> None:
         painter.drawLine(qt(head), qt(tip))
 
 
-def draw_vial(painter: QPainter, center: Vec2, angle: float) -> None:
+def draw_vial(
+    painter: QPainter,
+    center: Vec2,
+    angle: float,
+    liquid: QColor = VIAL_RED,
+) -> None:
     s = VIAL_SCALE
     neck = Vec2.from_angle(angle) * s
     painter.setPen(world_pen(VIAL_GLASS, 1.0 * s))
-    painter.setBrush(VIAL_RED)
+    painter.setBrush(liquid)
     painter.drawEllipse(qt(center), 2.8 * s, 2.8 * s)
     painter.setPen(world_pen(VIAL_GLASS, 1.6 * s))
     painter.drawLine(qt(center + neck * 2.6), qt(center + neck * 4.6))
@@ -662,7 +694,40 @@ def draw_vial(painter: QPainter, center: Vec2, angle: float) -> None:
 
 def draw_vials(painter: QPainter, vials: Vials) -> None:
     for vial in vials.flying:
-        draw_vial(painter, vial.position, vial.spin)
+        liquid = (
+            HERO_VIAL_GREEN
+            if getattr(vial.owner, "variant", None) == "hero_alchemist"
+            else VIAL_RED
+        )
+        draw_vial(painter, vial.position, vial.spin, liquid)
+    for ooze in vials.clinging:
+        fade = clamp((CLING_DURATION - ooze.age) * 2.5, 0.0, 1.0)
+        radius = 7.4 + math.sin(ooze.age * 8.0) * 0.75
+        points = []
+        for index in range(10):
+            angle = index * math.tau / 10
+            wobble = 1.0 + 0.18 * math.sin(index * 4.7 + ooze.age * 5.0)
+            points.append(ooze.position + Vec2.from_angle(angle, radius * wobble))
+        blob = QPainterPath(qt(points[-1].lerp(points[0], 0.5)))
+        for point, following in zip(points, [*points[1:], points[0]], strict=True):
+            blob.quadTo(qt(point), qt(point.lerp(following, 0.5)))
+        blob.closeSubpath()
+        edge = QColor(CLING_OOZE_DARK)
+        edge.setAlphaF(edge.alphaF() * fade)
+        fill = QColor(CLING_OOZE)
+        fill.setAlphaF(fill.alphaF() * fade)
+        glow = QColor(CLING_OOZE_GLOW)
+        glow.setAlphaF(glow.alphaF() * fade)
+        painter.setPen(world_pen(edge, 1.45))
+        painter.setBrush(fill)
+        painter.drawPath(blob)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(glow)
+        painter.drawEllipse(
+            qt(ooze.position + Vec2(-2.3, -2.1)),
+            1.65,
+            1.2,
+        )
     for explosion in vials.explosions:
         t = explosion.age / vials.explosion_time
         fade = 1.0 - t
@@ -944,8 +1009,8 @@ def draw_fallen(
     painter: QPainter,
     fallen: Iterable[
         Goblin
+        | Graveknight
         | Chimera
-        | Elemental
         | Worm
         | Dragon
         | Drake
@@ -954,7 +1019,7 @@ def draw_fallen(
         | Devourer
         | Displacer
         | Minotaur
-        | Ooze
+        | Aboleth
         | Lich
         | Mimic
         | Hydra
@@ -979,10 +1044,10 @@ def draw_fallen(
 
             draw_chimera(painter, body, outline)
             draw_fire(painter, body.flames)
-        elif isinstance(body, Elemental):
-            from dungeons_desktops.game.defenders.elementals.render import draw_elemental
-
-            draw_elemental(painter, body, outline)
+        elif isinstance(body, Zombie):
+            draw_zombie(painter, body, outline)
+        elif isinstance(body, Graveknight):
+            draw_graveknight(painter, body, outline)
         elif isinstance(body, Goblin):
             draw_goblin(painter, body, outline)
         elif isinstance(body, Worm):
@@ -995,10 +1060,10 @@ def draw_fallen(
             draw_displacer(painter, body, outline)
         elif isinstance(body, Minotaur):
             draw_minotaur(painter, body, outline)
-        elif isinstance(body, Ooze):
-            from dungeons_desktops.game.defenders.ooze.render import draw_ooze
+        elif isinstance(body, Aboleth):
+            from dungeons_desktops.game.defenders.aboleth.render import draw_aboleth
 
-            draw_ooze(painter, body, outline)
+            draw_aboleth(painter, body, outline)
         elif isinstance(body, Lich):
             draw_lich(painter, body, outline)
         elif isinstance(body, Mimic):
@@ -1034,20 +1099,10 @@ def draw_displacers(
 
 
 def draw_fire(painter: QPainter, flames: Iterable[Flame]) -> None:
-    """Flames going from white-hot through orange to smoke as they age."""
-    painter.setPen(Qt.PenStyle.NoPen)
-    for flame in flames:
-        t = flame.age / FLAME_LIFE
-        radius = flame.radius
-        if t < 0.55:
-            color = _mix(FLAME_HOT, FLAME_MID, t / 0.55)
-        else:
-            color = _mix(FLAME_MID, FLAME_SMOKE, (t - 0.55) / 0.45)
-        painter.setBrush(_alpha(color, 230 * (1.0 - t) ** 0.8))
-        painter.drawEllipse(qt(flame.position), radius, radius)
-        if t < 0.35:
-            painter.setBrush(_alpha(FLAME_HOT, 200 * (1.0 - t / 0.35)))
-            painter.drawEllipse(qt(flame.position), radius * 0.45, radius * 0.45)
+    """Flames going from white-hot through mid-color to smoke; respects Flame.palette."""
+    from dungeons_desktops.render.effects import draw_fire as _draw_fire
+
+    _draw_fire(painter, flames)
 
 
 def _mix(a: QColor, b: QColor, t: float) -> QColor:

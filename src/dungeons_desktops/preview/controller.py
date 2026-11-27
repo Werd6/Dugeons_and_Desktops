@@ -11,7 +11,6 @@ from __future__ import annotations
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.game.actors.base import Actor
 from dungeons_desktops.game.adventurers import model as stick_figure
-from dungeons_desktops.game.defenders.elementals.actor import KINDS
 from dungeons_desktops.game.defenders.goblins.actor import Goblin
 from dungeons_desktops.game.effects.breath import BREATHS, VARIANTS
 from dungeons_desktops.game.world.simulation import SimWorld
@@ -65,20 +64,71 @@ class RigPreviewController(SimWorld):
         self.add_stickman(variant=variant, wander=True)
         self.status = f"Added a wandering {variant}"
 
-    def spawn_dio(self) -> None:
-        hero = self.add_stickman(variant="hero_fighter", wander=True)
-        self.selected = hero
-        self.status = "Dio arrives with a divine trident and shield"
-
     def spawn_hero_fighter(self) -> None:
-        """Compatibility name retained for older preview callers."""
-        self.spawn_dio()
+        self.selected = self.add_stickman(variant="hero_fighter", wander=True)
+        self.status = f"{self.selected.display_name} arrives with a divine trident and shield"
+
+    def spawn_natures_wrath(self) -> None:
+        self.selected = self.add_stickman(variant="hero_druid", wander=True)
+        self.status = (
+            f"{self.selected.display_name} arrives: Fireball, Bear, Chain Lightning, Dragon"
+        )
+
+    def spawn_mighty(self) -> None:
+        self.selected = self.add_stickman(variant="hero_barbarian", wander=True)
+        self.status = f"{self.selected.display_name} arrives with a heavy war axe"
+
+    def spawn_iggy(self) -> None:
+        self.selected = self.add_stickman(variant="hero_wizard", wander=True)
+        self.status = f"{self.selected.display_name} arrives: a gnome wizard in a full-size hat"
+
+    def spawn_slayer(self) -> None:
+        self.selected = self.add_stickman(variant="hero_rogue", wander=True)
+        self.status = (
+            f"{self.selected.display_name} arrives with a bandana, "
+            "trailing cape, and jagged daggers"
+        )
+
+    def spawn_hero_paladin(self) -> None:
+        self.selected = self.add_stickman(variant="hero_paladin", wander=True)
+        self.status = f"{self.selected.display_name} arrives in plate armor with a tower shield"
+
+    def spawn_hunter(self) -> None:
+        self.selected = self.add_stickman(variant="hero_ranger", wander=True)
+        self.status = (
+            f"{self.selected.display_name} arrives with a sniper rifle, shotgun, and twin pistols"
+        )
+
+    def spawn_hero_cleric(self) -> None:
+        self.selected = self.add_stickman(variant="hero_cleric", wander=True)
+        self.status = (
+            f"{self.selected.display_name} arrives with a radiant sun staff and divine aura"
+        )
+
+    def spawn_hero_alchemist(self) -> None:
+        self.selected = self.add_stickman(variant="hero_alchemist", wander=True)
+        self.status = f"{self.selected.display_name} arrives with green vials and a pressurized rig"
+
+    def spawn_hero_sorcerer(self) -> None:
+        self.selected = self.add_stickman(variant="hero_sorcerer", wander=True)
+        self.status = f"{self.selected.display_name} arrives surrounded by three floating skulls"
 
     def next_class(self) -> None:
         classes = list(stick_figure.CLASSES)
         current = self.variant
         index = classes.index(current) + 1 if current in classes else 0
         self.set_variant(classes[index % len(classes)])
+
+    def spawn_zombie(self) -> None:
+        self.add_zombie()
+        self.status = "Added a shambling zombie"
+
+    def spawn_graveknights(self) -> None:
+        self.add_graveknights()
+        self.status = (
+            "Graveknight archer, fighter, mage, and barbarian; each spirit can claim "
+            "two regular killers"
+        )
 
     def spawn_goblin(self) -> None:
         self.add_goblin()
@@ -126,10 +176,11 @@ class RigPreviewController(SimWorld):
             "hurls adventurers, and enrages when shot"
         )
 
-    def spawn_ooze(self) -> None:
-        self.add_ooze()
+    def spawn_aboleth(self) -> None:
+        self.add_aboleth()
         self.status = (
-            "An ooze hunts over floors, walls, and ceilings, then engulfs adventurers"
+            "An aboleth swims in - psychic rays dominate adventurers until their brains "
+            "burst into slime, and its tentacles whip in turn"
         )
 
     def spawn_hydra(self) -> None:
@@ -160,19 +211,6 @@ class RigPreviewController(SimWorld):
             "A chimera prowls in - the lion stalks and pounces, the goat breathes fire, "
             "the serpent strikes"
         )
-
-    def spawn_elemental(self) -> None:
-        self.add_elemental()
-        self.status = (
-            "An elemental rises as water - every 5 damage it turns to earth, air, then fire "
-            "(J to change it now)"
-        )
-
-    def shift_elementals(self) -> None:
-        for elemental in self.elementals:
-            if elemental.vulnerable and elemental.form < len(KINDS) - 1:
-                elemental.shift()
-                self.status = f"The {elemental.kind} elemental changes form..."
 
     def spawn_mimic(self) -> None:
         self.add_mimic()
@@ -264,6 +302,9 @@ class RigPreviewController(SimWorld):
         return self.follower.remaining_steps() if self.animated else ()
 
     def set_variant(self, variant: str) -> None:
+        if self.selected in self.heroes:
+            self.status = "Named heroes keep their own class"
+            return
         self.selected.set_variant(variant)
         self.status = f"Class: {variant} ({self.selected.max_hp} HP)"
 

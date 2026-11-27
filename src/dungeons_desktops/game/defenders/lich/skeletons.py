@@ -42,6 +42,8 @@ ELBOW_ROOM = 14.0
 """Room it leaves between itself and the next skeleton."""
 STAND_OFF = 10.0
 """How far short of its quarry it stops, so it isn't standing inside him."""
+MAGE_RANGE = 280.0
+MAGE_COOLDOWN = 2.4
 
 
 class SkeletonPack(GoblinPack):
@@ -67,6 +69,9 @@ class Skeleton(Goblin):
         self.weapon = GoblinSword(layout)
         Actor.__init__(self, world, layout, anchor, upper=self.weapon)
         self.kind = "sword"
+        self.crowned = False
+        self.warband_horn_cooldown = 0.0
+        self.warband_boost = 0.0
         self.variant = variant
         """The class of the adventurer it was."""
         self.cooldown = world.random.uniform(0.3, 0.8) + RISE_TIME
@@ -80,6 +85,9 @@ class Skeleton(Goblin):
         self.crumble: float | None = None
         """Seconds until it falls apart, once its master is gone."""
         self.kills = 0
+        self.legendary_mage = False
+        self.mage_spell = "chain_lightning"
+        self.mage_cooldown = world.random.uniform(0.8, 1.4) + RISE_TIME
 
     @property
     def planner(self) -> Planner:
@@ -100,6 +108,24 @@ class Skeleton(Goblin):
             self.locomotion.update(dt, self.follower.command())
             self._track_velocity(dt)
             return
+        if self.legendary_mage:
+            self.mage_cooldown -= dt
+            prey = [s for s in self.world.stickmen if s.prey]
+            target = min(
+                prey,
+                key=lambda s: s.center().distance_to(self.center()),
+                default=None,
+            )
+            if (
+                target is not None
+                and self.mage_cooldown <= 0.0
+                and target.center().distance_to(self.center()) <= MAGE_RANGE
+            ):
+                self.world.necromancy.cast(self.mage_spell, self, self.center(), target)
+                self.mage_spell = (
+                    "fireball" if self.mage_spell == "chain_lightning" else "chain_lightning"
+                )
+                self.mage_cooldown = MAGE_COOLDOWN
         super().update(dt)
 
     def _head_out(self, dt: float) -> None:

@@ -1,13 +1,10 @@
 """The goblin pack: a war band that runs down the invaders together.
 
-`GoblinPack` is the shared brain. While the standard bearer lives, the whole pack
-hunts one stickman: the one nearest the flag, switching as soon as the flag is
-clearly nearer someone else (`SWITCH_MARGIN`). Once it falls, every goblin hunts the
-stickman nearest itself. Goblins making their way back toward a living flag move
-faster (`REGROUP_BOOST`), so the band closes ranks. With nobody to hunt, the pack
-roams to a rally point. Each `Goblin` routes there with the same planner moves the
-stickmen use (running, jumping, climbing walls, mantling ledges), to a spot with
-`ELBOW_ROOM` from where the others are headed, so the band spreads out.
+Each goblin hunts the stickman nearest itself. Goblins making their way back toward
+a living flag move faster (`REGROUP_BOOST`), so the band closes ranks. With nobody
+to hunt, the pack roams to a rally point. Each `Goblin` routes there with the same
+planner moves the stickmen use (running, jumping, climbing walls, mantling ledges),
+to a spot with `ELBOW_ROOM` from where the others are headed, so the band spreads out.
 
 There are three kinds:
 
@@ -46,6 +43,12 @@ from dungeons_desktops.rig.ragdoll import Ragdoll
 from dungeons_desktops.rig.skeleton import Pose
 
 GOBLIN_HP = 5
+KING_SIZE = 2.0
+"""Goblin King figure scale relative to a common goblin."""
+KING_HP = GOBLIN_HP * 4
+"""Goblin King hit points (4× a common goblin)."""
+KING_SPAWN_INTERVAL = 10.0
+"""Seconds between the king's free sword/spear recruits."""
 
 KINDS = ("sword", "spear", "flag")
 PACK = (
@@ -95,6 +98,10 @@ REGROUP_RADIUS = 60.0
 """...from further away than this."""
 RALLY_WAIT = (5.0, 9.0)
 RALLY_SPACING = 12.0
+WARBAND_HORN_COOLDOWN = 13.5
+WARBAND_HORN_DURATION = 5.0
+WARBAND_SPEED_BOOST = 1.35
+WARBAND_ATTACK_BOOST = 1.45
 
 
 def _hunt() -> Hunt:
@@ -105,7 +112,8 @@ class GoblinPack:
     def __init__(self, world: World) -> None:
         self.world = world
         self.hunt = _hunt()
-        """The band's quarry while the standard bearer lives."""
+        """Shared quarry for packs that still hunt together (Graveknights, etc.).
+        Goblins themselves each use their own `Goblin.hunt`."""
         self.rally: Vec2 | None = None
         self._rally_wait = 0.0
 
@@ -124,12 +132,11 @@ class GoblinPack:
 
     @property
     def target(self) -> Stickman | None:
-        """The band's shared quarry; None once the flag has fallen (each goblin then
-        hunts its own, see `hunt_for`)."""
-        return self.hunt.target if self.flag is not None else None
+        """No shared quarry: each goblin hunts its own (see `hunt_for`)."""
+        return None
 
     def hunt_for(self, goblin: Goblin) -> Hunt:
-        return self.hunt if self.flag is not None else goblin.hunt
+        return goblin.hunt
 
     def center(self) -> Vec2 | None:
         goblins = self.goblins
@@ -141,12 +148,7 @@ class GoblinPack:
         return total * (1.0 / len(goblins))
 
     def update(self, dt: float) -> None:
-        flag = self.flag
-        if flag is not None:
-            banner = flag.held_at if flag.held_at is not None else flag.contact()
-            hunting = self.hunt.update(dt, banner, self.world.stickmen) is not None
-        else:
-            hunting = all(g.hunt.target is not None for g in self.goblins)
+        hunting = any(g.hunt.target is not None for g in self.goblins)
         if hunting:
             self.rally = None
             return
@@ -155,15 +157,11 @@ class GoblinPack:
             self._pick_rally()
 
     def unreachable(self, goblin: Goblin, dt: float) -> None:
-        """`goblin` couldn't route to its quarry. The band's shared quarry is only
-        dropped once none of them has managed to for a while."""
-        if self.flag is not None:
-            self.hunt.unreachable(dt, GIVE_UP_AFTER * max(1, len(self.goblins)))
-        else:
-            goblin.hunt.unreachable(dt, GIVE_UP_AFTER)
+        """`goblin` couldn't route to its quarry; after a while it drops him."""
+        goblin.hunt.unreachable(dt, GIVE_UP_AFTER)
 
     def reached(self, goblin: Goblin) -> None:
-        self.hunt_for(goblin).reached()
+        goblin.hunt.reached()
 
     def _pick_rally(self) -> None:
         random = self.world.random
@@ -187,12 +185,25 @@ class Goblin(Actor, Mortal):
     max_hp = GOBLIN_HP
     linger = 2.5
 
-    def __init__(self, world: World, anchor: Anchor, kind: str = "sword") -> None:
-        layout = goblin.build_goblin()
+    def __init__(
+        self,
+        world: World,
+        anchor: Anchor,
+        kind: str = "sword",
+        *,
+        legendary: bool = False,
+        crowned: bool = False,
+    ) -> None:
+        layout = goblin.build_goblin(size=KING_SIZE if crowned else 1.0)
         weapons = {"sword": GoblinSword, "spear": SpearThrower, "flag": Banner}
         self.weapon = weapons[kind](layout)
         super().__init__(world, layout, anchor, upper=self.weapon)
         self.kind = kind
+        self.crowned = crowned
+        self.legendary = legendary
+        self.warband_horn_cooldown = 0.0
+        self.warband_boost = 0.0
+        self.king_spawn_wait = KING_SPAWN_INTERVAL if crowned else 0.0
         self.cooldown = world.random.uniform(0.3, 1.0)
         self.target: Stickman | None = None
         self.hunt = _hunt()
@@ -200,6 +211,9 @@ class Goblin(Actor, Mortal):
         self.held_at: Vec2 | None = None
         self._replan_wait = world.random.uniform(0.0, REPLAN_EVERY)
         self.ragdoll: Ragdoll | None = None
+        if crowned and legendary:
+            self.max_hp = KING_HP
+            self.damage = 0
 
     @property
     def planner(self) -> Planner:
@@ -237,16 +251,20 @@ class Goblin(Actor, Mortal):
             self.locomotion.update(dt, self._held_command(self.held_at))
             return
         self._replan_if_needed()
-        self.cooldown -= dt
+        self.warband_horn_cooldown -= dt
+        self.warband_boost = max(0.0, self.warband_boost - dt)
+        attack_pace = self._boost_attack()
+        self.cooldown -= dt * attack_pace
+        self._try_warband_horn()
+        self._try_king_spawn(dt)
         pack = self.pack
-        if pack.flag is None:
-            self.hunt.update(dt, self.contact(), self.world.stickmen)
-        self.target = pack.hunt_for(self).target
+        self.hunt.update(dt, self.contact(), self.world.stickmen)
+        self.target = self.hunt.target
         busy = self.weapon.busy
         ready = (
             not busy
             and not self.follower.in_transition
-            and self.locomotion.mode in self.weapon.held_modes
+            and self.locomotion.mode in (self.weapon.held_modes | self.weapon.cling_modes)
         )
         if ready and self.target is not None and self.cooldown <= 0.0:
             self._try_attack(self.target)
@@ -258,10 +276,17 @@ class Goblin(Actor, Mortal):
                 self._replan_wait = REPLAN_EVERY
                 self._head_out(dt)
         pace = 1.0 if rooted else self._regroup_pace()
+        pace *= self._boost_speed()
         command = self.follower.command() if rooted else self.follower.update(dt * pace)
         self.locomotion.update(dt, command)
         self._resolve_attack()
         self._track_velocity(dt)
+
+    def _boost_speed(self) -> float:
+        return WARBAND_SPEED_BOOST if self.warband_boost > 0.0 else 1.0
+
+    def _boost_attack(self) -> float:
+        return WARBAND_ATTACK_BOOST if self.warband_boost > 0.0 else 1.0
 
     def _head_out(self, dt: float) -> None:
         target = self.target
@@ -289,12 +314,13 @@ class Goblin(Actor, Mortal):
 
     def _throwing_spot(self, target: Stickman) -> Vec2:
         """Footing `HANG_BACK` short of the quarry, on this goblin's side of it if there's
-        any, else past it: never a wall (no throwing while climbing) and never so close
-        that the quarry is inside `SPEAR_RANGE`."""
+        any, else past it: stay put when already in range (walk or climb), and never so
+        close that the quarry is inside `SPEAR_RANGE`."""
         here = self.follower.current_anchor()
         distance = target.center().distance_to(self.center())
         in_range = SPEAR_RANGE[0] <= distance <= SPEAR_RANGE[1]
-        if here.surface.walkable and in_range and self._spear_arc(target) is not None:
+        climbing = self.locomotion.mode is PoseMode.CLIMB
+        if in_range and self._spear_arc(target) is not None and (here.surface.walkable or climbing):
             return here.point
         quarry = target.contact()
         back = HANG_BACK["spear"]
@@ -370,6 +396,48 @@ class Goblin(Actor, Mortal):
 
     # ----- fighting ------------------------------------------------------------
 
+    def _try_warband_horn(self) -> None:
+        """Rally and replenish a legendary warband once it has lost two members."""
+        if (
+            not self.crowned
+            or not getattr(self, "legendary", False)
+            or self.warband_horn_cooldown > 0.0
+        ):
+            return
+        living = [g for g in self.pack.goblins if not g.dead]
+        if len(PACK) - len(living) < 2:
+            return
+        for member in living:
+            member.warband_boost = max(member.warband_boost, WARBAND_HORN_DURATION)
+        for _ in range(2):
+            recruit = self.world.add_goblin(
+                self.contact(), legendary=True, crowned=False
+            )
+            recruit.warband_boost = WARBAND_HORN_DURATION
+        self.warband_horn_cooldown = WARBAND_HORN_COOLDOWN
+        self.world.debris.burst(
+            self.center(), Vec2(0.0, -1.0), 8, 120.0, spread=2.2, puffs=4, scale=0.7
+        )
+
+    def _try_king_spawn(self, dt: float) -> None:
+        """Every `KING_SPAWN_INTERVAL`, the crowned king calls a sword or spear recruit."""
+        if not self.crowned or not getattr(self, "legendary", False) or self.dead:
+            return
+        self.king_spawn_wait -= dt
+        if self.king_spawn_wait > 0.0:
+            return
+        self.king_spawn_wait = KING_SPAWN_INTERVAL
+        kind = self.world.random.choice(("sword", "spear"))
+        recruit = self.world.add_goblin(self.contact(), kind, legendary=True, crowned=False)
+        quota = max(1, int(round(self.hp / 4.0)))
+        recruit.max_hp = quota
+        recruit.damage = 0
+        if hasattr(self.world, "defender_max_hp"):
+            self.world.defender_max_hp += recruit.max_hp
+        self.world.debris.burst(
+            self.center(), Vec2(0.0, -1.0), 6, 100.0, spread=1.8, puffs=3, scale=0.55
+        )
+
     def _face(self, point: Vec2) -> None:
         self.follower.facing = 1 if point.x >= self.contact().x else -1
 
@@ -386,10 +454,11 @@ class Goblin(Actor, Mortal):
             self._face(target.center())
             self.weapon.start()
             self.cooldown = SWORD_COOLDOWN
-        elif self.kind == "spear" and self.locomotion.mode is PoseMode.WALK:
+        elif self.kind == "spear" and self.locomotion.mode in (PoseMode.WALK, PoseMode.CLIMB):
             distance = target.center().distance_to(self.center())
             if SPEAR_RANGE[0] <= distance <= SPEAR_RANGE[1] and self._spear_arc(target) is not None:
-                self.halt()
+                if self.locomotion.mode is PoseMode.WALK:
+                    self.halt()
                 self._face(target.center())
                 self.weapon.start()
                 self.cooldown = SPEAR_COOLDOWN

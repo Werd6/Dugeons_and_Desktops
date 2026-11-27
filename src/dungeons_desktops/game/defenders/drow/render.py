@@ -29,7 +29,8 @@ from dungeons_desktops.game.defenders.drow.actor import (
     Drow,
     Lizard,
 )
-from dungeons_desktops.game.defenders.drow.darkness import GLOBE_RADIUS, GROW_TIME, Darkness
+from dungeons_desktops.game.defenders.drow.darkness import GROW_TIME, Darkness
+from dungeons_desktops.render.chromatic import chromatic_appearance
 from dungeons_desktops.render.equipment import draw_strokes
 from dungeons_desktops.render.primitives import qt, world_pen
 
@@ -37,6 +38,8 @@ SCALES = QColor(44, 112, 118)
 SCALES_DARK = QColor(26, 72, 80)
 SCALES_FAR = QColor(30, 78, 86)
 BELLY = QColor(120, 172, 150)
+GOLD_BELLY = QColor(236, 196, 72)
+GOLD_SPIKE = QColor(255, 214, 74)
 LIZARD_EYE = QColor(250, 190, 60)
 MOUTH = QColor(70, 16, 24)
 TONGUE = QColor(214, 70, 96)
@@ -49,6 +52,8 @@ ARMOR = QColor(46, 38, 60)
 LEATHERS = QColor(104, 86, 138)
 LEATHERS_FAR = QColor(64, 52, 88)
 CLOAK = QColor(48, 26, 68)
+GOLD_CLOAK = QColor(214, 170, 56)
+GOLD_CLOAK_LINING = QColor(148, 104, 28)
 CROSSBOW = QColor(150, 98, 58)
 CROSSBOW_DARK = QColor(28, 20, 22)
 STRING = QColor(214, 210, 200)
@@ -58,6 +63,7 @@ DARK_RIM = QColor(70, 30, 110)
 FAERIE = QColor(206, 130, 255)
 FAERIE_CORE = QColor(246, 222, 255)
 SWOOSH = QColor(226, 214, 255)
+SILVER = QColor(226, 232, 255)
 
 BODY_XS = (-11.0, -8.0, -4.0, 0.0, 4.0, 8.0, 11.0, 14.5)
 BODY_HALF = (3.2, 4.0, 4.5, 4.6, 4.5, 4.2, 3.6, 2.8)
@@ -78,6 +84,8 @@ def draw_lizards(
 
 def draw_drow(painter: QPainter, drow: Iterable[Drow], outline: QColor | None = None) -> None:
     for elf in drow:
+        if getattr(elf, "cloaked", False):
+            continue
         draw_drow_on_foot(painter, elf, outline)
 
 
@@ -101,6 +109,7 @@ class _Frame:
         return up if self.roll < 0.5 else -up
 
 
+@chromatic_appearance
 def draw_lizard(painter: QPainter, lizard: Lizard, outline: QColor | None = None) -> None:
     """Tail, far legs, body, saddle, near legs, head; then the rider."""
     frame = _Frame(lizard)
@@ -110,6 +119,8 @@ def draw_lizard(painter: QPainter, lizard: Lizard, outline: QColor | None = None
     body = _body_path(frame)
     head = _Head(frame)
     rider = _Rider(lizard) if lizard.mounted and not lizard.dead else None
+    if outline is None and getattr(lizard, "legendary", False):
+        _legendary_aura(painter, lizard.center(), lizard.time, 27.0)
 
     if outline is not None:
         grow = 1.6
@@ -159,7 +170,8 @@ def _body_path(frame: _Frame) -> QPainterPath:
 
 
 def _paint_body(painter: QPainter, frame: _Frame, body: QPainterPath) -> None:
-    """Flat scales, a pale belly, and dark spine ticks down its back."""
+    """Flat scales, a pale (or gold) belly, and spine ticks down its back."""
+    legendary = getattr(frame.lizard, "legendary", False)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(SCALES)
     painter.drawPath(body)
@@ -167,14 +179,14 @@ def _paint_body(painter: QPainter, frame: _Frame, body: QPainterPath) -> None:
     painter.setClipPath(body, Qt.ClipOperation.IntersectClip)
     belly = [frame.at(x, BODY_Y + h * 0.95) for x, h in zip(BODY_XS, BODY_HALF, strict=True)]
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.setPen(world_pen(BELLY, 3.0))
+    painter.setPen(world_pen(GOLD_BELLY if legendary else BELLY, 3.2 if legendary else 3.0))
     painter.drawPath(_smooth(belly, closed=False))
     painter.restore()
-    painter.setPen(world_pen(SCALES_DARK, 0.8))
+    painter.setPen(world_pen(GOLD_SPIKE if legendary else SCALES_DARK, 1.15 if legendary else 0.8))
     for x in SPINES:
         base = frame.at(x, BODY_Y - _half_at(x) + 0.4)
         up = frame.up(x)
-        tip = base + up * 1.8 - along(up) * (frame.facing * 0.8)
+        tip = base + up * (2.2 if legendary else 1.8) - along(up) * (frame.facing * 0.8)
         painter.drawLine(qt(base), qt(tip))
 
 
@@ -381,8 +393,9 @@ class _Rider:
         top_back = self.shoulder + back * 1.2
         top_front = self.shoulder + self.ahead * 0.5
         length = 11.0 + 2.0 * stream
+        cloak = GOLD_CLOAK if getattr(lizard, "legendary", False) else CLOAK
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(CLOAK)
+        painter.setBrush(cloak)
         painter.drawPolygon(
             [
                 qt(top_front),
@@ -458,9 +471,12 @@ class _Rider:
 # ----- the drow on foot ----------------------------------------------------------------
 
 
+@chromatic_appearance
 def draw_drow_on_foot(painter: QPainter, drow: Drow, outline: QColor | None = None) -> None:
     """A flowing cape behind him, a stickman-built elf body in dark leathers with white
     hair, a pointed ear and red eye, and his scimitars (a swoosh behind each cut)."""
+    if getattr(drow, "cloaked", False):
+        return
     facing = drow.facing
     transforms = drow.transforms()
     layout = drow.layout
@@ -472,6 +488,8 @@ def draw_drow_on_foot(painter: QPainter, drow: Drow, outline: QColor | None = No
     strokes = weapon.strokes(transforms, facing)
     held = weapon.held
 
+    if outline is None and getattr(drow, "legendary", False):
+        _legendary_aura(painter, drow.center(), drow.time, 22.0)
     _foot_cape(painter, drow, shoulder, hip)
     if not held:
         draw_strokes(painter, strokes)
@@ -534,10 +552,11 @@ def _foot_cape(painter: QPainter, drow: Drow, shoulder: Vec2, hip: Vec2) -> None
         + back * (2.5 * speed)
         + across * (0.4 * wave)
     )
+    legendary = getattr(drow, "legendary", False)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(CLOAK)
+    painter.setBrush(GOLD_CLOAK if legendary else CLOAK)
     painter.drawPolygon([qt(pin_front), qt(pin_back), qt(hem_back), qt(hem_mid), qt(hem_front)])
-    painter.setBrush(QColor(36, 18, 52))
+    painter.setBrush(GOLD_CLOAK_LINING if legendary else QColor(36, 18, 52))
     painter.drawPolygon(
         [
             qt(pin_front.lerp(pin_back, 0.45)),
@@ -583,15 +602,16 @@ def draw_darkness(painter: QPainter, darkness: Darkness, stickmen: Iterable[Stic
         radius = max(1.0, globe.radius)
         strength = globe.strength
         gradient = QRadialGradient(qt(globe.center), radius)
-        gradient.setColorAt(0.0, _alpha(DARK, 240 * strength))
-        gradient.setColorAt(0.8, _alpha(DARK, 228 * strength))
+        depth = 1.0 if globe.legendary else 0.88
+        gradient.setColorAt(0.0, _alpha(DARK, 252 * strength * depth))
+        gradient.setColorAt(0.8, _alpha(DARK, 242 * strength * depth))
         gradient.setColorAt(1.0, _alpha(DARK, 0))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(gradient)
         painter.drawEllipse(qt(globe.center), radius, radius)
         if globe.age < GROW_TIME * 2.0:
             burst = globe.age / (GROW_TIME * 2.0)
-            ring = GLOBE_RADIUS * (0.3 + 0.8 * burst)
+            ring = globe.full_radius * (0.3 + 0.8 * burst)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(world_pen(_alpha(FAERIE, 160 * (1.0 - burst)), 1.5))
             painter.drawEllipse(qt(globe.center), ring, ring)
@@ -599,6 +619,20 @@ def draw_darkness(painter: QPainter, darkness: Darkness, stickmen: Iterable[Stic
         _orb(painter, orb.position, 3.0, orb.trail or [])
     painter.restore()
     draw_faerie_fire(painter, stickmen, darkness.time)
+
+
+def _legendary_aura(painter: QPainter, center: Vec2, t: float, radius: float) -> None:
+    glow = QRadialGradient(qt(center), radius)
+    glow.setColorAt(0.0, _alpha(DARK_RIM, 70))
+    glow.setColorAt(1.0, _alpha(DARK, 0))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(glow)
+    painter.drawEllipse(qt(center), radius, radius)
+    for k in range(4):
+        angle = t * 0.8 + k * math.tau / 4.0
+        point = center + Vec2.from_angle(angle, radius * 0.65)
+        painter.setBrush(_alpha(SILVER, 150 + 70 * math.sin(t * 5.0 + k)))
+        painter.drawEllipse(qt(point), 0.9, 0.9)
 
 
 def _orb(painter: QPainter, center: Vec2, radius: float, trail: list[Vec2]) -> None:

@@ -3,10 +3,9 @@
 Thick round-capped strokes in one skin colour over an optional fattened outline,
 a pale belly stripe, and a handful of accents:
 a sparse row of big reddish dorsal spikes, four thick muscled legs on big clawed feet (the
-far pair darker, behind). The necks are tapering
-tubes of the same skin, each outlined on its own so they read apart, the two
-outermost shaded darker as they sit behind. Each head is a blunt wedge skull with a
-hinged jaw and two swept-back red crest spikes; the middle one is just bigger.
+far pair darker, behind). Each neck and its head are one filled skin path (round-capped
+ribbon united with skull and jaw), drawn behind the body so the chest covers the bases.
+Accents (crest, mouth, teeth, eye) are painted on after. The middle head is just bigger.
 
 Whatever of it is in the ground at its hole is clipped away, and a lip of dirt is
 drawn over the cut.
@@ -29,7 +28,17 @@ from dungeons_desktops.game.defenders.hydra.actor import (
     LegPose,
     Segment,
 )
-from dungeons_desktops.game.effects.render import ACID, ACID_DARK, draw_acid, draw_motes
+from dungeons_desktops.game.effects.render import (
+    ACID,
+    ACID_DARK,
+    VENOM,
+    VENOM_DARK,
+    VENOM_HAZE,
+    VENOM_SHINE,
+    draw_acid,
+    draw_motes,
+)
+from dungeons_desktops.render.chromatic import chromatic_appearance
 
 GLOB_SHINE = QColor(236, 255, 170, 200)
 
@@ -48,10 +57,13 @@ CLAW = QColor(240, 230, 204)
 FIN = QColor(176, 70, 42)
 CREST = QColor(222, 92, 44)
 CREST_RED = QColor(184, 48, 36)
+LEGENDARY_GOLD = QColor(255, 210, 72)
+LEGENDARY_ACID = VENOM
+LEGENDARY_ACID_DARK = VENOM_DARK
+LEGENDARY_ACID_HAZE = VENOM_HAZE
 MOUTH = QColor(96, 22, 28)
 TOOTH = QColor(250, 246, 232)
 EYE = QColor(255, 210, 60)
-PUPIL = QColor(28, 16, 10)
 DIRT = QColor(132, 96, 62)
 DIRT_DARK = QColor(84, 58, 36)
 
@@ -67,8 +79,10 @@ MUSCLE = 14.0
 LIMB_WIDTH = 8.0
 TOES = ((7.5, 1.0), (6.0, 0.3), (4.5, -0.5))
 """Length and droop of each toe, nearest first."""
-DRAW_ORDER = (0, 4, 1, 3, 2)
-"""Back heads first, the big middle one on top."""
+DRAW_ORDER = (0, 4, 2, 1, 3)
+"""Outer backs first, big middle third, nearer pair on top."""
+BASE_CAP = 8
+"""Samples on the round semicircle that closes each neck at the chest."""
 
 SKULL = [(-4.5, -0.5), (-3.5, -4.8), (3.0, -5.2), (8.5, -3.4), (10.5, -0.6), (-3.0, 0.8)]
 JAW = [(-3.0, 0.4), (9.5, 0.3), (8.0, 3.0), (-2.5, 3.6)]
@@ -94,6 +108,7 @@ def draw_hydras(painter: QPainter, hydras, outline: QColor | None = None) -> Non
         draw_hydra(painter, hydra, outline)
 
 
+@chromatic_appearance
 def draw_hydra(painter: QPainter, hydra: Hydra, outline: QColor | None = None) -> None:
     draw_motes(painter, hydra.wisps)
     if not hydra.underground and hydra.segments:
@@ -110,40 +125,63 @@ def draw_hydra(painter: QPainter, hydra: Hydra, outline: QColor | None = None) -
         if outline is not None:
             _legs(painter, hydra, False, outline)
         _legs(painter, hydra, False, None)
+        # Neck+head units first: the body drawn next masks the round bases into the chest.
         for head in heads:
-            _neck(painter, head, outline)
+            _neck_head(painter, hydra, head, outline)
         if outline is not None:
             _legs(painter, hydra, True, outline)
             _body_strokes(painter, runs, outline, 2.4)
             _spikes(painter, hydra, runs, outline, 1.6)
         _body(painter, hydra, runs)
         _legs(painter, hydra, True, None)
-        for head in heads:
-            if outline is not None:
-                _head(painter, hydra, head, outline)
-            _head(painter, hydra, head, None)
         painter.restore()
         if cut is not None and hydra.hole is not None:
             _lip(painter, hydra)
         charge = hydra.glob_charge
         if charge > 0.0:
             mouth = hydra.heads[2].mouth_point
-            _blob(painter, mouth + Vec2(0.0, 4.0 * charge), GLOB_RADIUS * charge, 0.0)
-    draw_acid(painter, hydra.acid)
+            _blob(
+                painter,
+                mouth + Vec2(0.0, 4.0 * charge),
+                GLOB_RADIUS * charge,
+                0.0,
+                legendary=getattr(hydra, "legendary", False),
+            )
+    legendary = getattr(hydra, "legendary", False)
+    if legendary:
+        draw_acid(
+            painter,
+            hydra.acid,
+            haze=LEGENDARY_ACID_HAZE,
+            core=LEGENDARY_ACID,
+            dark=LEGENDARY_ACID_DARK,
+        )
+    else:
+        draw_acid(painter, hydra.acid)
     glob = hydra.glob
     if glob is not None:
-        _blob(painter, glob.position, GLOB_RADIUS, glob.velocity.y)
+        _blob(painter, glob.position, GLOB_RADIUS, glob.velocity.y, legendary=legendary)
 
 
-def _blob(painter: QPainter, center: Vec2, radius: float, fall: float) -> None:
+def _blob(
+    painter: QPainter,
+    center: Vec2,
+    radius: float,
+    fall: float,
+    *,
+    legendary: bool = False,
+) -> None:
     """A wobbling glob of acid, stretched out long as it falls fast."""
     if radius < 0.5:
         return
     stretch = 1.0 + min(fall / 900.0, 0.8)
+    core = LEGENDARY_ACID if legendary else ACID
+    dark = LEGENDARY_ACID_DARK if legendary else ACID_DARK
+    shine = VENOM_SHINE if legendary else GLOB_SHINE
     painter.save()
     painter.translate(_qt(center))
-    painter.setPen(_pen(ACID_DARK, 1.6))
-    painter.setBrush(ACID)
+    painter.setPen(_pen(dark, 1.6))
+    painter.setBrush(core)
     path = QPainterPath()
     path.moveTo(QPointF(0.0, radius * stretch))
     path.cubicTo(
@@ -158,7 +196,7 @@ def _blob(painter: QPainter, center: Vec2, radius: float, fall: float) -> None:
     )
     painter.drawPath(path)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(GLOB_SHINE)
+    painter.setBrush(shine)
     painter.drawEllipse(QPointF(-radius * 0.35, radius * 0.1), radius * 0.22, radius * 0.32)
     painter.restore()
 
@@ -226,7 +264,12 @@ def _spike_height(hydra: Hydra, index: int) -> float:
 
 def _spikes(painter: QPainter, hydra: Hydra, runs, outline: QColor | None, grow: float) -> None:
     painter.setPen(_pen(outline, grow) if outline is not None else Qt.PenStyle.NoPen)
-    painter.setBrush(outline if outline is not None else FIN)
+    fill = (
+        outline
+        if outline is not None
+        else (LEGENDARY_GOLD if getattr(hydra, "legendary", False) else FIN)
+    )
+    painter.setBrush(fill)
     for run in runs:
         for i, s in run:
             if i not in SPIKES:
@@ -308,16 +351,31 @@ def _neck_width(head: Head, t: float) -> float:
     return (NECK_WIDTH[0] + (NECK_WIDTH[1] - NECK_WIDTH[0]) * t) * (0.8 + 0.2 * head.scale)
 
 
+def _head_flip(head: Head) -> float:
+    return -1.0 if math.cos(head.angle) < 0.0 else 1.0
+
+
+def _head_local(head: Head, local: tuple[float, float]) -> Vec2:
+    """Head-local (x, y) into world space (same transform the accent draw uses)."""
+    s = head.scale
+    flip = _head_flip(head)
+    lx, ly = s * local[0], s * flip * local[1]
+    return head.position + Vec2(lx, ly).rotated(head.angle)
+
+
 def _neck_curve(head: Head) -> list[tuple[Vec2, Vec2]]:
-    """Points and unit tangents along one smooth cubic from the chest to the skull.
+    """Points and unit tangents along one smooth cubic from the chest into the skull.
 
     The simulated chain only sets where the neck leaves the chest and how long it is;
-    the drawn neck is this curve, so it never kinks."""
+    the drawn neck is this curve, so it never kinks. The tip lands inside the skull so
+    the united skin path has no seam at the hinge.
+    """
     neck = head.neck
     out = (neck[min(2, len(neck) - 1)] - neck[0]).normalized()
-    root = neck[0] - out * (NECK_WIDTH[0] * 0.9)
+    # Only a short tuck under the body fill — long pull made a fat knob on the chest.
+    root = neck[0] - out * (NECK_WIDTH[0] * 0.65)
     facing = Vec2.from_angle(head.angle, 1.0)
-    end = head.position - facing * (3.0 * head.scale)
+    end = head.position - facing * (1.2 * head.scale)
     pull = max(8.0, root.distance_to(end) * 0.45)
     a, b = root + out * pull, end - facing * pull
     curve = []
@@ -330,7 +388,16 @@ def _neck_curve(head: Head) -> list[tuple[Vec2, Vec2]]:
     return curve
 
 
-def _neck_shape(head: Head, grow: float) -> QPainterPath:
+def _poly_path(points: list[Vec2]) -> QPainterPath:
+    path = QPainterPath(_qt(points[0]))
+    for point in points[1:]:
+        path.lineTo(_qt(point))
+    path.closeSubpath()
+    return path
+
+
+def _neck_ribbon(head: Head, grow: float = 0.0) -> QPainterPath:
+    """Tapering neck tube with a round semicircle cap at the chest (no flat corners)."""
     curve = _neck_curve(head)
     left, right = [], []
     for k, (point, tangent) in enumerate(curve):
@@ -343,38 +410,71 @@ def _neck_shape(head: Head, grow: float) -> QPainterPath:
         path.lineTo(_qt(point))
     for point in reversed(right):
         path.lineTo(_qt(point))
+    # Round base: semicircle from right[0] back to left[0], away from the tip.
+    center, tangent = curve[0]
+    offset = right[0] - center
+    toward_back = -tangent
+    ccw = offset.rotated(0.2).dot(toward_back)
+    cw = offset.rotated(-0.2).dot(toward_back)
+    sign = 1.0 if ccw >= cw else -1.0
+    for i in range(1, BASE_CAP):
+        path.lineTo(_qt(center + offset.rotated(sign * math.pi * i / BASE_CAP)))
     path.closeSubpath()
     return path
 
 
-def _neck(painter: QPainter, head: Head, outline: QColor | None) -> None:
+def _skin_path(
+    head: Head,
+    skull: list[tuple[float, float]],
+    jaw: list[tuple[float, float]],
+) -> QPainterPath:
+    """One filled silhouette: round-capped neck united with skull and jaw."""
+    path = _neck_ribbon(head)
+    path = path.united(_poly_path([_head_local(head, p) for p in skull]))
+    path = path.united(_poly_path([_head_local(head, p) for p in jaw]))
+    return path
+
+
+def _neck_head(painter: QPainter, hydra: Hydra, head: Head, outline: QColor | None) -> None:
+    """Draw one neck+head as a single skin path, then paint face accents on top."""
     if len(head.neck) < 2:
         return
+    skull = _rotate(SKULL, -0.2 * head.mouth)
+    jaw = _rotate(JAW, 0.55 * head.mouth)
+    skin = _skin_path(head, skull, jaw)
+    legendary = getattr(hydra, "legendary", False)
+    if outline is not None:
+        _crest_at(painter, head, outline, legendary)
     painter.setPen(_pen(outline, 2.4) if outline is not None else Qt.PenStyle.NoPen)
     painter.setBrush(_skin(head))
-    painter.drawPath(_neck_shape(head, 0.0))
+    painter.drawPath(skin)
+    _face(painter, hydra, head, skull, jaw)
 
 
-def _head(painter: QPainter, hydra: Hydra, head: Head, outline: QColor | None) -> None:
-    if len(head.neck) < 2:
-        return
-    flip = -1.0 if math.cos(head.angle) < 0.0 else 1.0
-    s = head.scale
+def _crest_at(
+    painter: QPainter, head: Head, outline: QColor | None, legendary: bool
+) -> None:
     painter.save()
     painter.translate(_qt(head.position))
     painter.rotate(math.degrees(head.angle))
-    painter.scale(s, s * flip)
-    skull = _rotate(SKULL, -0.2 * head.mouth)
-    jaw = _rotate(JAW, 0.55 * head.mouth)
-    if outline is not None:
-        painter.setPen(_pen(outline, 2.0 / s * 1.2))
-        painter.setBrush(outline)
-        _crest(painter, outline)
-        painter.drawPolygon(_points(skull))
-        painter.drawPolygon(_points(jaw))
-        painter.restore()
-        return
-    _crest(painter, None)
+    painter.scale(head.scale, head.scale * _head_flip(head))
+    _crest(painter, outline, legendary)
+    painter.restore()
+
+
+def _face(
+    painter: QPainter,
+    hydra: Hydra,
+    head: Head,
+    skull: list[tuple[float, float]],
+    jaw: list[tuple[float, float]],
+) -> None:
+    """Crest, mouth, teeth and eye in head-local space (on top of the united skin)."""
+    painter.save()
+    painter.translate(_qt(head.position))
+    painter.rotate(math.degrees(head.angle))
+    painter.scale(head.scale, head.scale * _head_flip(head))
+    _crest(painter, None, getattr(hydra, "legendary", False))
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(MOUTH)
     painter.drawPolygon(_points([HINGE, skull[4], jaw[1]]))
@@ -382,29 +482,31 @@ def _head(painter: QPainter, hydra: Hydra, head: Head, outline: QColor | None) -
     for x in (4.5, 7.5):
         top = _edge_y(skull, x)
         painter.drawPolygon(_points([(x - 0.7, top), (x + 0.7, top), (x, top + 1.5)]))
-    painter.setBrush(_skin(head))
-    painter.drawPolygon(_points(jaw))
-    painter.drawPolygon(_points(skull))
-    painter.setBrush(SKIN_DARK)
-    painter.drawPolygon(_points([(-3.5, -4.8), (3.0, -5.2), (1.0, -3.6), (-2.8, -3.4)]))
-    painter.setBrush(EYE)
+    for x in (4.5, 7.5):
+        ridge = _jaw_y(jaw, x)
+        painter.drawPolygon(_points([(x - 0.65, ridge), (x + 0.65, ridge), (x, ridge - 1.35)]))
+    painter.setBrush(EYE if not hydra.dead else SKIN_DARK)
     painter.drawEllipse(QPointF(1.6, -2.2), 1.3, 1.05)
-    painter.setBrush(PUPIL if not hydra.dead else SKIN_DARK)
-    painter.drawEllipse(QPointF(1.8, -2.2), 0.4, 0.9)
     painter.restore()
 
 
-def _crest(painter: QPainter, outline: QColor | None) -> None:
-    """Two swept-back red spikes behind the skull."""
+def _crest(painter: QPainter, outline: QColor | None, legendary: bool = False) -> None:
+    """Two short swept-back crest spikes behind the skull."""
     plates = [
-        [(-1.0, -4.4), (-7.5, -8.6), (0.6, -4.9)],
-        [(-3.0, -3.6), (-9.0, -5.2), (-1.8, -4.3)],
+        [(-0.8, -4.3), (-4.6, -6.6), (0.5, -4.8)],
+        [(-2.6, -3.5), (-5.8, -4.6), (-1.5, -4.1)],
     ]
     if outline is None:
         painter.setPen(Qt.PenStyle.NoPen)
     for k, plate in enumerate(plates):
         if outline is None:
-            painter.setBrush(CREST if k == 0 else CREST_RED)
+            if legendary:
+                painter.setBrush(LEGENDARY_GOLD if k == 0 else LEGENDARY_GOLD.darker(125))
+            else:
+                painter.setBrush(CREST if k == 0 else CREST_RED)
+        else:
+            painter.setBrush(outline)
+            painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPolygon(_points(plate))
 
 
@@ -417,6 +519,13 @@ def _rotate(points: list[tuple[float, float]], angle: float) -> list[tuple[float
 def _edge_y(skull: list[tuple[float, float]], x: float) -> float:
     """Height of the skull's underside (hinge back to snout tip) at `x`."""
     (ax, ay), (bx, by) = skull[5], skull[4]
+    t = max(0.0, min(1.0, (x - ax) / (bx - ax)))
+    return ay + (by - ay) * t
+
+
+def _jaw_y(jaw: list[tuple[float, float]], x: float) -> float:
+    """Height of the jaw's top edge (hinge to snout) at `x`."""
+    (ax, ay), (bx, by) = jaw[0], jaw[1]
     t = max(0.0, min(1.0, (x - ax) / (bx - ax)))
     return ay + (by - ay) * t
 

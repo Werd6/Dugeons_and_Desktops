@@ -30,6 +30,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.effects.breath import BREATHS
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
@@ -117,6 +118,8 @@ BITE_PUSH = 160.0
 
 BOW_RANGE = 280.0
 BOW_COOLDOWN = (1.4, 2.0)
+RED_ALPHA_SIZE = 1.5
+"""Legendary red (pack alpha) is drawn and fought this much larger."""
 ARROW_SPEED = 330.0
 ARROW_GRAVITY = 160.0
 ARROW_LIFE = 2.5
@@ -186,6 +189,7 @@ def step_arrows(
     damage: int = ARROW_DAMAGE,
     source: str = "kobold",
     death: str = "Shot by a kobold archer!",
+    on_hit=None,
 ) -> list[Missile]:
     """Fly arrows (kobold ones by default) on; one that hits an adventurer hurts him and
     is spent. Returns those still in flight."""
@@ -202,6 +206,8 @@ def step_arrows(
         if hit is not None:
             push = arrow.velocity.normalized() * 120.0 + Vec2(0.0, -40.0)
             hit.hurt(damage, point, push, source, death)
+            if on_hit is not None and hit.prey:
+                on_hit(hit)
         elif point.y < world.floor_y and arrow.age < ARROW_LIFE:
             flying.append(arrow)
     return flying
@@ -271,6 +277,10 @@ class Drake(Mortal):
         self.bolt_cooldown = rng.uniform(1.5, BOLT_COOLDOWN)
         self.trap_cooldown = rng.uniform(2.0, 6.0)
         self._fx = random.Random(self.slot * 7919 + len(self.world.drakes))
+        self.size = 1.0
+        """Drawn / hit scale; legendary red alpha grows to `RED_ALPHA_SIZE`."""
+        self.legendary_alpha = False
+        """True for the legendary red pack leader."""
         self.head = self.body
         self.head_angle = self.angle
         self.legs = [DrakeLeg(near=True, phase_offset=0.0), DrakeLeg(near=False, phase_offset=0.5)]
@@ -361,12 +371,25 @@ class Drake(Mortal):
         return [self.body, self.chest, self.hip, self.head, self.rider_shoulder, self.rider_head]
 
     def hits(self, point: Vec2, margin: float = 0.0) -> bool:
+        scale = self.size
         return (
-            any(p.distance_to(point) <= 5.0 + margin for p in (self.body, self.chest, self.hip))
-            or self.head.distance_to(point) <= 5.0 + margin
-            or self.rider_shoulder.distance_to(point) <= 3.0 + margin
-            or self.rider_head.distance_to(point) <= RIDER_HEAD + margin
+            any(
+                p.distance_to(point) <= 5.0 * scale + margin
+                for p in (self.body, self.chest, self.hip)
+            )
+            or self.head.distance_to(point) <= 5.0 * scale + margin
+            or self.rider_shoulder.distance_to(point) <= 3.0 * scale + margin
+            or self.rider_head.distance_to(point) <= RIDER_HEAD * scale + margin
         )
+
+    def _bow_cadence(self) -> tuple[float, float]:
+        """Seconds between shots; the red alpha's kobold looses twice as often."""
+        low, high = BOW_COOLDOWN
+        if self.legendary_alpha or (
+            getattr(self, "legendary", False) and self.variant == "red"
+        ):
+            return (low * 0.5, high * 0.5)
+        return BOW_COOLDOWN
 
     # ----- simulation --------------------------------------------------------------
 
@@ -401,10 +424,11 @@ class Drake(Mortal):
     def _pick_quarry(self, dt: float) -> None:
         self.retarget -= dt
         quarry = self.quarry
-        if quarry is not None and quarry.prey and self.retarget > 0.0:
+        prey = priority_prey(self._prey())
+        if quarry is not None and quarry in prey and self.retarget > 0.0:
             return
         self.retarget = RETARGET
-        chosen = min(self._prey(), key=lambda s: s.center().distance_to(self.body), default=None)
+        chosen = min(prey, key=lambda s: s.center().distance_to(self.body), default=None)
         if chosen is not None and chosen is not quarry:
             self._pick_side(chosen)
         self.quarry = chosen
@@ -711,7 +735,11 @@ class Drake(Mortal):
         flap = self.flap + dt * (24.0 if self.velocity.y < -30.0 else 16.0)
         y += FLAP_BOB * (math.cos(flap) - math.cos(self.flap))
         y = clamp(y, self._top + 10.0, world.floor_y - HIP_HEIGHT + 1.0)
-        self.body = Vec2(x, y)
+        before = self.body
+        delta = Vec2(x, y) - before
+        # Carry posed parts with the body so the head never trails on a fast dive.
+        if abs(delta.x) > 1e-9 or abs(delta.y) > 1e-9:
+            self._shift(delta)
         self.flap = flap
         if abs(self.velocity.x) > 12.0:
             self.facing = 1 if self.velocity.x > 0 else -1
@@ -773,7 +801,7 @@ class Drake(Mortal):
         self.aim = self.aim.lerp(want, min(1.0, dt * 12.0)).normalized()
         if self.bow_cooldown <= 0.0 and self.aim.dot(want) > 0.97:
             self.arrows.append(Missile(self.bow_hand + want * 2.0, velocity))
-            self.bow_cooldown = self._fx.uniform(*BOW_COOLDOWN)
+            self.bow_cooldown = self._fx.uniform(*self._bow_cadence())
 
     def _spit(self, dt: float) -> None:
         """Every `BOLT_COOLDOWN`, a bolt of breath at its quarry (or whoever is nearest)."""
@@ -856,7 +884,15 @@ class Drake(Mortal):
         self.archer_target = None
         self.bite_time = 0.0
         leap = self.velocity * 0.4 + Vec2(-self.facing * 45.0, -110.0)
-        self.world.add_kobold(self.seat, self.variant, self.facing, leap, self.aim)
+        kobold = self.world.add_kobold(
+            self.seat,
+            self.variant,
+            self.facing,
+            leap,
+            self.aim,
+            legendary=getattr(self, "legendary", False),
+        )
+        kobold.alpha = bool(getattr(self, "legendary_alpha", False))
 
     def update_dead(self, dt: float) -> None:
         self.clock += dt
@@ -1004,7 +1040,8 @@ class Drake(Mortal):
         bob = math.sin(self.phase * math.tau * 2.0 + 0.8) * 0.8 * self.gait
         head = self.chest + self.local(reach + Vec2(0.0, bob))
         heading = self.angle + self.facing * (0.05 if self.flying else 0.3 - 0.3 * lunge)
-        rate = 1.0 if snap else min(1.0, dt * (20.0 if lunge else 12.0))
+        # In flight, lock the head to the neck — lerping trails behind a fast body.
+        rate = 1.0 if snap or self.flying else min(1.0, dt * (20.0 if lunge else 12.0))
         self.head = self.head.lerp(head, rate)
         self.head_angle += math.remainder(heading - self.head_angle, math.tau) * rate
         self.jaw += (lunge * 0.9 - self.jaw) * (1.0 if snap else min(1.0, dt * 8.0))

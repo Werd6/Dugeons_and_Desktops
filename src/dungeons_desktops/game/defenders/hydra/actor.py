@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp
 from dungeons_desktops.game.actors.base import surface_below
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.defenders.dragon.actor import Flame, climbing_wall
 from dungeons_desktops.game.effects.breath import Mote, splash, step_motes
@@ -222,6 +223,7 @@ CHOMP_RADIUS = 8.0
 CHOMP_STIFFNESS = 10.0
 """How much harder the neck drives the head through the slam and holds it on impact."""
 CHOMP_DEATH = "Chomped by the hydra!"
+LEGENDARY_BITE_HEAL = 3
 ACID_RATE = 50.0
 ACID_SPEED = 380.0
 ACID_LIFE = 1
@@ -776,7 +778,7 @@ class Hydra(Mortal):
 
     def _pick_foe(self, dt: float) -> Stickman | None:
         self._foe_commit -= dt
-        prey = self._prey()
+        prey = priority_prey(self._prey())
         foe = self.foe
         if foe is not None and foe in prey and self._foe_commit > 0.0:
             return foe
@@ -1037,11 +1039,14 @@ class Hydra(Mortal):
         before = glob.position
         glob.velocity += Vec2(0.0, GLOB_GRAVITY * dt)
         glob.position = before + glob.velocity * dt
+        palette = "magenta" if getattr(self, "legendary", False) else ""
         if rng.random() < 0.7:
             drip = glob.position + Vec2(rng.uniform(-6.0, 6.0), rng.uniform(-8.0, 0.0))
             velocity = Vec2(rng.uniform(-15.0, 15.0), glob.velocity.y * 0.25)
             size = rng.uniform(1.2, 2.0)
-            self.wisps.append(Mote("drip", drip, velocity, 3.0, size, floor=glob.floor))
+            self.wisps.append(
+                Mote("drip", drip, velocity, 3.0, size, floor=glob.floor, palette=palette)
+            )
         for stickman in world.stickmen:
             if not stickman.prey:
                 continue
@@ -1052,13 +1057,13 @@ class Hydra(Mortal):
                 if stickman.hurt_from(
                     self, GLOB_DAMAGE, at, push, GLOB_SOURCE, GLOB_DEATH, bleed=False
                 ):
-                    stickman.succumb("acid")
+                    stickman.succumb("acid", palette=palette)
                     self.kills += 1
         if glob.position.y >= glob.floor:
             spot = Vec2(glob.lane, glob.floor)
             for _ in range(8):
                 x = glob.lane + rng.uniform(-glob.half - 10.0, glob.half + 10.0)
-                self.wisps += splash(Vec2(x, glob.floor), 3.0, rng)
+                self.wisps += splash(Vec2(x, glob.floor), 3.0, rng, palette)
             world.debris.burst(spot, UP, 6, 120.0, spread=1.3, puffs=5, scale=0.8)
             self.glob = None
 
@@ -1775,14 +1780,15 @@ class Hydra(Mortal):
     # ----- heads -------------------------------------------------------------------------------
 
     def _roots(self) -> list[Vec2]:
+        """Neck bases sit back and up inside the chest so they don't poke out of the body."""
         chest = self.segments[0]
         roots = []
         for j in range(len(self.heads)):
             k = j - 2
             roots.append(
                 chest.center
-                + chest.tangent * (chest.radius * 0.5 - abs(k) * 1.5)
-                + chest.normal * (k * 4.5)
+                + chest.tangent * (-chest.radius * 0.25)
+                + chest.normal * (chest.radius * 0.5 + k * 3.0)
             )
         return roots
 
@@ -1854,6 +1860,12 @@ class Hydra(Mortal):
 
     def _choose_target(self, head: Head, prey: list[Stickman]) -> None:
         root = head.root
+        guards = priority_prey([
+            s for s in prey if getattr(s, "target_priority", 0)
+            and s.center().distance_to(root) <= head.reach and self._sees(head, s.center())
+        ])
+        if guards:
+            prey = guards
         target = head.target
         if target is not None:
             valid = (
@@ -1944,7 +1956,8 @@ class Hydra(Mortal):
             t = self.clock
             goal += Vec2(math.sin(t * f1 + p1), math.sin(t * f2 + p2) * 0.8) * SWAY
         if head.spraying:
-            u = 1.0 - head.spray / SPRAY_TIME
+            duration = SPRAY_TIME * (1.6 if getattr(self, "legendary", False) else 1.0)
+            u = 1.0 - head.spray / duration
             goal -= Vec2.from_angle(head.angle, RECOIL * math.sin(math.pi * u))
         return self._keep_out(goal)
 
@@ -2069,14 +2082,17 @@ class Hydra(Mortal):
             self.chomps += 1
         else:
             aim = target.center() - mouth
-            if aim.length() > SPRAY_RANGE:
+            spray_range = SPRAY_RANGE * (1.45 if getattr(self, "legendary", False) else 1.0)
+            if aim.length() > spray_range:
                 return
             if abs(math.remainder(aim.angle() - head.angle, math.tau)) > SPRAY_AIM:
                 return
-            head.spray = SPRAY_TIME
+            head.spray = SPRAY_TIME * (1.6 if getattr(self, "legendary", False) else 1.0)
             head.due = 0.0
             self.sprays += 1
-        head.cooldown = ATTACK_COOLDOWN
+        head.cooldown = ATTACK_COOLDOWN * (
+            0.7 if getattr(self, "legendary", False) else 1.0
+        )
         self.attack_gap = ATTACK_GAP
 
     def _bite(self, head: Head) -> None:
@@ -2097,20 +2113,26 @@ class Hydra(Mortal):
             push = Vec2.from_angle(head.angle, 240.0) + Vec2(0.0, -140.0)
             if stickman.hurt_from(self, CHOMP_DAMAGE, mouth, push, "hydra", CHOMP_DEATH):
                 self.kills += 1
+                if getattr(self, "legendary", False):
+                    self.damage = max(0, self.damage - LEGENDARY_BITE_HEAL)
+                    world.spells.sparkle(self.chest, "life_drain", 10, 90.0)
 
     def _emit(self, head: Head, dt: float) -> None:
         rng = self.world.random
-        head.due += ACID_RATE * dt
+        legendary = getattr(self, "legendary", False)
+        head.due += ACID_RATE * (1.8 if legendary else 1.0) * dt
         mouth = head.mouth_point
         while head.due >= 1.0:
             head.due -= 1.0
-            direction = Vec2.from_angle(head.angle + rng.gauss(0.0, 0.13))
-            self.acid.append(Flame(mouth, direction * (ACID_SPEED * rng.uniform(0.8, 1.1))))
+            direction = Vec2.from_angle(head.angle + rng.gauss(0.0, 0.2 if legendary else 0.13))
+            speed = ACID_SPEED * (1.25 if legendary else 1.0)
+            self.acid.append(Flame(mouth, direction * (speed * rng.uniform(0.8, 1.1))))
 
     # ----- acid ----------------------------------------------------------------------------------
 
     def _update_acid(self, dt: float) -> None:
         rng = self.world.random
+        palette = "magenta" if getattr(self, "legendary", False) else ""
         if self.wisps:
             self.wisps = step_motes(self.wisps, dt, rng)
         if not self.acid:
@@ -2125,20 +2147,28 @@ class Hydra(Mortal):
             flame.position += flame.velocity * dt
             point = flame.position
             if point.y >= world.floor_y:
-                self.wisps += splash(Vec2(point.x, world.floor_y), 2.0, rng)
+                self.wisps += splash(Vec2(point.x, world.floor_y), 2.0, rng, palette)
                 continue
             box = next((b for b in solid if b.contains(point)), None)
             if box is not None:
                 spot = Vec2(point.x, box.top) if point.y - box.top < 10.0 else point
                 if rng.random() < 0.5:
-                    self.wisps += splash(spot, 1.6, rng)
+                    self.wisps += splash(spot, 1.6, rng, palette)
                 continue
             if flame.age >= ACID_LIFE:
                 if rng.random() < 0.35:
                     ground = self._ground_below(point)
                     velocity = Vec2(flame.velocity.x * 0.3, max(0.0, flame.velocity.y * 0.3))
                     self.wisps.append(
-                        Mote("drip", point, velocity, 3.0, rng.uniform(1.0, 1.6), floor=ground)
+                        Mote(
+                            "drip",
+                            point,
+                            velocity,
+                            3.0,
+                            rng.uniform(1.0, 1.6),
+                            floor=ground,
+                            palette=palette,
+                        )
                     )
                 continue
             alive.append(flame)
@@ -2155,14 +2185,14 @@ class Hydra(Mortal):
                     push = flame.velocity.normalized() * 160.0 + Vec2(0.0, -100.0)
                     if stickman.hurt_from(
                         self,
-                        ACID_DAMAGE,
+                        ACID_DAMAGE + (2 if getattr(self, "legendary", False) else 0),
                         stickman.center(),
                         push,
                         "hydra",
                         DEATH,
                         bleed=False,
                     ):
-                        stickman.succumb("acid")
+                        stickman.succumb("acid", palette=palette)
                         self.kills += 1
                     break
 

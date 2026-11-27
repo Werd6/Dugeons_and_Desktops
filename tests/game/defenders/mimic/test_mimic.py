@@ -7,6 +7,7 @@ from dungeons_desktops.desktop.overlay import DEFENDER_BARS
 from dungeons_desktops.desktop.session import DEFENDERS, DesktopSession
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord
 from dungeons_desktops.game.adventurers.actor import LURE_HASTE, Stickman
+from dungeons_desktops.game.adventurers.model import HEROES
 from dungeons_desktops.game.defenders.mimic.actor import (
     APPROACH,
     CAMO_COOLDOWN,
@@ -149,6 +150,7 @@ def test_a_baited_rogue_sees_through_it_and_exposes_it_with_a_thrown_dagger():
         return False
 
     assert run(world, 2.0, until=thrown)
+    assert mimic.knife.owner is rogue
     assert max(heights) > 10.0, "he hops back"
     assert (
         rogue.reeled is None
@@ -164,6 +166,34 @@ def test_a_baited_rogue_sees_through_it_and_exposes_it_with_a_thrown_dagger():
     assert run(world, 1.0, until=lambda: mimic.mode is Mode.HUNT)
     assert mimic in world.monsters()
     assert run(world, 1.0, until=lambda: mimic.target is rogue), "and it fights him"
+
+
+def test_named_heroes_ignore_mimic_bait_while_regular_adventurers_still_take_it():
+    world = world_with()
+    mimic = world.add_mimic(Vec2(500, FLOOR))
+    heroes = [
+        world.add_stickman(Vec2(180 + 24 * index, FLOOR), variant)
+        for index, variant in enumerate(HEROES)
+    ]
+    regular = world.add_stickman(Vec2(380, FLOOR), "barbarian")
+
+    assert all(hero.is_hero for hero in heroes)
+    assert run(world, 1.0, until=lambda: regular.lure is mimic)
+    assert regular in mimic.baited
+    assert all(hero.lure is None and hero not in mimic.baited for hero in heroes)
+
+
+def test_a_baited_adventurer_is_released_if_changed_into_a_hero():
+    world = world_with()
+    mimic = world.add_mimic(Vec2(500, FLOOR))
+    adventurer = world.add_stickman(Vec2(380, FLOOR), "barbarian")
+    assert run(world, 1.0, until=lambda: adventurer.lure is mimic)
+
+    adventurer.set_variant("hero_fighter")
+    run(world, STEP * 2)
+
+    assert adventurer.is_hero and adventurer.lure is None
+    assert adventurer not in mimic.baited
 
 
 def test_a_rogue_exposes_it_again_each_time_it_baits_him():

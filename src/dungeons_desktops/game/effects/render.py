@@ -13,8 +13,13 @@ from PySide6.QtGui import QColor, QPainter, QPen
 from dungeons_desktops.core.geometry import Vec2, clamp
 from dungeons_desktops.game.defenders.dragon.actor import Dragon
 from dungeons_desktops.game.effects.breath import BREATHS, Demise, Mote
-from dungeons_desktops.game.effects.flames import FLAME_LIFE, Flame
+from dungeons_desktops.game.effects.flames import Flame
 from dungeons_desktops.rig.skeleton import BoneTransform
+
+
+def _flame_age(flame: Flame) -> float:
+    """Normalized age in [0, 1] across this particle's own lifespan."""
+    return min(1.0, flame.age / max(flame.life, 1e-3))
 
 GAS_YOUNG = QColor(214, 236, 104)
 GAS = QColor(120, 184, 60)
@@ -24,6 +29,12 @@ BOLT_CORE = QColor(236, 250, 255)
 ACID = QColor(176, 232, 40)
 ACID_DARK = QColor(84, 132, 16)
 ACID_HAZE = QColor(150, 210, 50)
+VENOM = QColor(255, 96, 210)
+VENOM_DARK = QColor(168, 36, 150)
+VENOM_HAZE = QColor(255, 140, 230)
+VENOM_BODY = QColor(220, 100, 180)
+VENOM_BODY_FAR = QColor(160, 50, 130)
+VENOM_SHINE = QColor(255, 200, 240)
 FROST = QColor(226, 240, 255)
 FROST_EDGE = QColor(140, 190, 240)
 ICE = QColor(200, 230, 255)
@@ -95,7 +106,7 @@ def _draw_poison(painter: QPainter, flames: Iterable[Flame]) -> None:
     """Billowing balls of green gas."""
     painter.setPen(Qt.PenStyle.NoPen)
     for flame in flames:
-        t = flame.age / FLAME_LIFE
+        t = _flame_age(flame)
         seed = _seed(flame)
         color = mix(GAS_YOUNG, GAS, t / 0.5) if t < 0.5 else mix(GAS, GAS_OLD, (t - 0.5) / 0.5)
         radius = flame.radius * 1.15
@@ -118,16 +129,23 @@ def _draw_lightning(painter: QPainter, dragon: Dragon) -> None:
     random = Random(int(dragon.clock * 18.0) * 7919 + len(dragon.wisps))
     painter.setPen(Qt.PenStyle.NoPen)
     for flame in flames:
-        t = flame.age / FLAME_LIFE
+        t = _flame_age(flame)
         r = flame.radius * 0.55
         painter.setBrush(alpha(BOLT_GLOW, 70 * (1.0 - t)))
         painter.drawEllipse(qt(flame.position), r, r)
-    young = [f for f in flames if f.age < 0.5 * FLAME_LIFE]
-    if not young:
-        return
+    # Span the whole breath (not only the near half) so long Cataclysm streams stay electrified.
+    by_age = sorted(flames, key=lambda f: f.age)
+    ancient = getattr(dragon, "legendary", False)
+    bolt_count = min(12 if ancient else 7, len(by_age))
+    if bolt_count <= 1:
+        ends = list(by_age)
+    else:
+        ends = [
+            by_age[int(round(i * (len(by_age) - 1) / (bolt_count - 1)))]
+            for i in range(bolt_count)
+        ]
     breathing = dragon.fire_time > 0.0 and not dragon.dead
-    start = dragon.mouth if breathing else min(young, key=lambda f: f.age).position
-    ends = random.sample(young, min(7, len(young)))
+    start = dragon.mouth if breathing else by_age[0].position
     flicker = random.choice((1.0, 1.0, 0.55))
     for flame in ends:
         path = _bolt(start, flame.position, random)
@@ -137,6 +155,14 @@ def _draw_lightning(painter: QPainter, dragon: Dragon) -> None:
             along = path[-1] - path[k]
             fork_end = path[k] + along.rotated(random.choice((-1, 1)) * 0.6) * 0.45
             _stroke_bolt(painter, _bolt(path[k], fork_end, random), flicker * 0.7)
+    # Chain mid→far bolts so the tip of a long stream keeps arcing on its own.
+    if ancient and len(by_age) >= 4:
+        mid = by_age[len(by_age) // 3 :]
+        for _ in range(min(4, len(mid) // 2)):
+            a, b = random.sample(mid, 2)
+            if a.age > b.age:
+                a, b = b, a
+            _stroke_bolt(painter, _bolt(a.position, b.position, random), flicker * 0.85)
 
 
 def _bolt(start: Vec2, end: Vec2, random: Random) -> list[Vec2]:
@@ -160,29 +186,46 @@ def _stroke_bolt(painter: QPainter, path: list[Vec2], strength: float) -> None:
     painter.drawPolyline(points)
 
 
-def draw_acid(painter: QPainter, flames: Iterable[Flame]) -> None:
+def draw_acid(
+    painter: QPainter,
+    flames: Iterable[Flame],
+    *,
+    haze: QColor | None = None,
+    core: QColor | None = None,
+    dark: QColor | None = None,
+) -> None:
     """A spray of acid on its own (the desert hydra's)."""
-    _draw_acid(painter, flames)
+    _draw_acid(painter, flames, haze=haze, core=core, dark=dark)
 
 
-def _draw_acid(painter: QPainter, flames: Iterable[Flame]) -> None:
+def _draw_acid(
+    painter: QPainter,
+    flames: Iterable[Flame],
+    *,
+    haze: QColor | None = None,
+    core: QColor | None = None,
+    dark: QColor | None = None,
+) -> None:
     """A spray of acid droplets streaking out of the jaws through a thin haze."""
+    haze_c = haze if haze is not None else ACID_HAZE
+    core_c = core if core is not None else ACID
+    dark_c = dark if dark is not None else ACID_DARK
     for flame in flames:
-        t = flame.age / FLAME_LIFE
+        t = _flame_age(flame)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(alpha(ACID_HAZE, 45 * (1.0 - t)))
+        painter.setBrush(alpha(haze_c, 45 * (1.0 - t)))
         painter.drawEllipse(qt(flame.position), flame.radius * 0.7, flame.radius * 0.7)
     for flame in flames:
-        t = flame.age / FLAME_LIFE
+        t = _flame_age(flame)
         seed = _seed(flame)
         streak = flame.velocity * 0.035
         for k in range(2):
             offset = Vec2.from_angle(seed * 1.7 + k * 3.1, flame.radius * 0.4 * (k + 0.5))
             spot = flame.position + offset
             size = 1.1 + 0.25 * ((seed >> k) % 4)
-            painter.setPen(world_pen(alpha(ACID_DARK, 200 * (1.0 - 0.5 * t)), size * 1.5))
+            painter.setPen(world_pen(alpha(dark_c, 200 * (1.0 - 0.5 * t)), size * 1.5))
             painter.drawLine(qt(spot - streak), qt(spot))
-            painter.setPen(world_pen(alpha(ACID, 255 * (1.0 - 0.4 * t)), size))
+            painter.setPen(world_pen(alpha(core_c, 255 * (1.0 - 0.4 * t)), size))
             painter.drawLine(qt(spot - streak * 0.6), qt(spot))
 
 
@@ -191,7 +234,7 @@ def _draw_cold(painter: QPainter, flames: Iterable[Flame]) -> None:
     painter.setPen(Qt.PenStyle.NoPen)
     flames = list(flames)
     for flame in flames:
-        t = flame.age / FLAME_LIFE
+        t = _flame_age(flame)
         fade = (1.0 - t) ** 0.7
         r = flame.radius * 1.05
         painter.setBrush(alpha(FROST_EDGE, 95 * fade))
@@ -202,7 +245,7 @@ def _draw_cold(painter: QPainter, flames: Iterable[Flame]) -> None:
         seed = _seed(flame)
         if seed % 2:
             continue
-        t = flame.age / FLAME_LIFE
+        t = _flame_age(flame)
         offset = Vec2.from_angle(seed * 0.9, flame.radius * 0.5)
         _snowflake(
             painter, flame.position + offset, 1.8 + flame.radius * 0.25, seed + t * 4.0, 1.0 - t
@@ -228,9 +271,17 @@ def draw_motes(painter: QPainter, motes: Iterable[Mote]) -> None:
         _draw_mote(painter, mote)
 
 
+def _acid_colors(palette: str) -> tuple[QColor, QColor, QColor]:
+    """Core, dark, and haze for acid motes / death puddles."""
+    if palette == "magenta":
+        return VENOM, VENOM_DARK, VENOM_HAZE
+    return ACID, ACID_DARK, ACID_HAZE
+
+
 def _draw_mote(painter: QPainter, mote: Mote) -> None:
     t = mote.t
     kind, at, size = mote.kind, mote.position, mote.size
+    acid, acid_dark, acid_haze = _acid_colors(getattr(mote, "palette", ""))
     painter.setPen(Qt.PenStyle.NoPen)
     if kind in ("cloud", "fume"):
         r = size * (1.0 + (0.5 if kind == "cloud" else 1.2) * t)
@@ -239,7 +290,10 @@ def _draw_mote(painter: QPainter, mote: Mote) -> None:
         painter.drawEllipse(qt(at), r, r * 0.85)
     elif kind in ("mist", "steam", "smoke"):
         r = size * (1.0 + 1.0 * t)
-        color = {"mist": FROST, "steam": STEAM, "smoke": SMOKE}[kind]
+        if kind == "steam" and getattr(mote, "palette", "") == "magenta":
+            color = mix(VENOM_HAZE, STEAM, 0.35)
+        else:
+            color = {"mist": FROST, "steam": STEAM, "smoke": SMOKE}[kind]
         painter.setBrush(alpha(color, (110 if kind == "smoke" else 90) * (1.0 - t)))
         painter.drawEllipse(qt(at), r, r)
     elif kind == "spark":
@@ -250,24 +304,24 @@ def _draw_mote(painter: QPainter, mote: Mote) -> None:
         painter.drawLine(qt(tail), qt(at))
     elif kind == "drip":
         tail = at - mote.velocity * 0.02
-        painter.setPen(world_pen(ACID_DARK, size * 1.4))
+        painter.setPen(world_pen(acid_dark, size * 1.4))
         painter.drawLine(qt(tail), qt(at))
-        painter.setPen(world_pen(ACID, size))
+        painter.setPen(world_pen(acid, size))
         painter.drawLine(qt(tail), qt(at))
     elif kind == "sizzle":
         w = size * (1.0 + 0.6 * t)
-        painter.setBrush(alpha(ACID_DARK, 200 * (1.0 - t)))
+        painter.setBrush(alpha(acid_dark, 200 * (1.0 - t)))
         painter.drawEllipse(qt(at), w, w * 0.35)
-        painter.setBrush(alpha(ACID, 230 * (1.0 - t)))
+        painter.setBrush(alpha(acid, 230 * (1.0 - t)))
         painter.drawEllipse(qt(at + Vec2(0.0, -0.2)), w * 0.6, w * 0.22)
-        painter.setPen(world_pen(alpha(ACID, 220 * (1.0 - t)), 0.4))
+        painter.setPen(world_pen(alpha(acid, 220 * (1.0 - t)), 0.4))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         bubble = 0.4 + 0.4 * math.sin(mote.age * 30.0) ** 2
         painter.drawEllipse(qt(at + Vec2(w * 0.3, -0.6)), bubble, bubble)
     elif kind == "bubble":
         r = size * (0.6 + 0.6 * t)
-        painter.setPen(world_pen(alpha(ACID, 230 * (1.0 - t * t)), 0.45))
-        painter.setBrush(alpha(ACID_HAZE, 90 * (1.0 - t)))
+        painter.setPen(world_pen(alpha(acid, 230 * (1.0 - t * t)), 0.45))
+        painter.setBrush(alpha(acid_haze, 90 * (1.0 - t)))
         painter.drawEllipse(qt(at), r, r)
     elif kind == "shard":
         fade = clamp((1.0 - t) / 0.35, 0.0, 1.0)
@@ -298,6 +352,12 @@ def demise_colors(
             return SHOCK_FLASH, SHOCK_FLASH, QColor(30, 40, 60)
         return mix(near, CHARRED, tint), mix(far, CHARRED_FAR, tint), mix(head, CHARRED, tint)
     if kind == "acid":
+        if getattr(demise, "palette", "") == "magenta":
+            return (
+                mix(near, VENOM_BODY, tint),
+                mix(far, VENOM_BODY_FAR, tint),
+                mix(head, VENOM_DARK, tint),
+            )
         return mix(near, ACID_BODY, tint), mix(far, ACID_BODY_FAR, tint), mix(head, ACID_DARK, tint)
     return mix(near, FROZEN, tint), mix(far, FROZEN_FAR, tint), mix(head, FROZEN_HEAD, tint)
 
@@ -338,11 +398,16 @@ def _draw_melting_head(
     if head is None:
         return
     melt, tint = demise.melt, demise.tint
+    body, dark, _ = (
+        (VENOM_BODY, VENOM_DARK, VENOM_HAZE)
+        if getattr(demise, "palette", "") == "magenta"
+        else (ACID_BODY, ACID_DARK, ACID_HAZE)
+    )
     rx = head_radius * (1.0 + 0.3 * melt)
     ry = head_radius * (1.0 - 0.85 * melt)
     center = head.end + Vec2(0.0, head_radius - ry)
-    painter.setPen(world_pen(mix(QColor(236, 230, 214), ACID_BODY, tint), 1.5))
-    painter.setBrush(mix(QColor(24, 26, 33), ACID_DARK, tint))
+    painter.setPen(world_pen(mix(QColor(236, 230, 214), body, tint), 1.5))
+    painter.setBrush(mix(QColor(24, 26, 33), dark, tint))
     painter.drawEllipse(qt(center), rx, ry)
 
 
@@ -357,14 +422,16 @@ def _draw_puddle(
     grow = clamp((demise.time - 0.2) / 1.0, 0.0, 1.0)
     if grow <= 0.0:
         return
+    acid, acid_dark, _ = _acid_colors(getattr(demise, "palette", ""))
+    shine = VENOM_SHINE if getattr(demise, "palette", "") == "magenta" else QColor(236, 255, 160)
     width = head_radius * (1.2 + 1.6 * melt) * grow
     depth = head_radius * (0.25 + 0.55 * melt)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(alpha(ACID_DARK, 225))
+    painter.setBrush(alpha(acid_dark, 225))
     painter.drawEllipse(qt(middle), width, depth)
-    painter.setBrush(alpha(ACID, 215))
+    painter.setBrush(alpha(acid, 215))
     painter.drawEllipse(qt(middle + Vec2(-0.1, -0.25) * depth), width * 0.75, depth * 0.6)
-    painter.setBrush(alpha(QColor(236, 255, 160), 160))
+    painter.setBrush(alpha(shine, 160))
     painter.drawEllipse(qt(middle + Vec2(-0.35 * width, -0.4 * depth)), width * 0.18, depth * 0.2)
 
 

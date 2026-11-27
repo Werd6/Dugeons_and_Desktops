@@ -49,7 +49,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp, smoothstep, wrap_angle
-from dungeons_desktops.game.actors.hunting import nearest
+from dungeons_desktops.game.actors.hunting import nearest, priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.actors.movement import RouteFollower
 from dungeons_desktops.navigation.planner import (
@@ -115,8 +115,10 @@ LOPE_DISTANCE = 240.0
 """Routes with more than this left to go are loped."""
 
 LEAP_RANGE = 320.0
+LEGENDARY_LEAP_RANGE = 620.0
 LEAP_MIN = 70.0
 LEAP_CHANCE = 0.35
+LEGENDARY_LEAP_CHANCE = 0.7
 """Odds a fresh wander goal is a leap to another window (if one is in range)."""
 LEAP_COOLDOWN = 2.0
 MAX_LEAP_SPEED = 950.0
@@ -176,28 +178,40 @@ POUNCE_MIN = 45.0
 """Closer than this it slinks off rather than pounce."""
 POUNCE_COOLDOWN = 5.0
 POUNCE_DAMAGE = 10
+LEGENDARY_POUNCE_DAMAGE = 22
 POUNCE_HIT = 22.0
 """A pounce mauls its quarry if its body or head comes this near his middle."""
 POUNCE_PUSH = 260.0
+LEGENDARY_POUNCE_PUSH = 420.0
 RUSE_COOLDOWN = 2.0
+LEGENDARY_RUSE_COOLDOWN = 0.85
 """It sends its illusion out as soon as it starts stalking someone, and again this long
 after the last one is gone."""
 RUSE_TIME = 7.0
+LEGENDARY_RUSE_TIME = 11.0
 """The longest the illusion keeps up its feints."""
 HOLD_BACK = 210.0
 """Till its illusion is out after its quarry it creeps no closer than this to him."""
 RUSE_CREEP = 140.0
 """While its illusion is out after him it creeps in to this, ready to pounce."""
 FRENZY_TIME = 3.5
+LEGENDARY_FRENZY_TIME = 5.5
 """After a pounce lands it frenzies this long, chaining pounces on whoever's near."""
 FRENZY_KILL = 1.0
 """Each kill in a frenzy draws it out this much longer..."""
 FRENZY_MAX = 6.0
+LEGENDARY_FRENZY_MAX = 9.0
 """...up to this long in all."""
 FRENZY_RANGE = 200.0
+LEGENDARY_FRENZY_RANGE = 320.0
 FRENZY_EVERY = 0.55
+LEGENDARY_FRENZY_EVERY = 0.32
 """Least time from one frenzied pounce's crouch to the next."""
 FRENZY_POUNCES = 3
+LEGENDARY_FRENZY_POUNCES = 6
+LEGENDARY_MAX_DECOYS = 8
+LEGENDARY_DECOY_DAMAGE = 2
+"""Legendary decoys chip for 2 so follow-ups don't finish adventurers before the real beast."""
 CALM_TIME = 3.0
 """It counts as under attack for this long after a hit or a blow aimed at it from within
 `THREAT_REACH`; under attack, or with anyone within `CLOSE_RANGE`, it fights instead of
@@ -415,7 +429,11 @@ class Displacer(Mortal):
         self.owner = owner
         """The real beast, if this is its illusion."""
         self.ghost: Displacer | None = None
-        """Its illusion while one is out."""
+        """Its illusion while one is out (or the lead decoy of a legendary pack)."""
+        self.ghost2: Displacer | None = None
+        """Legacy second decoy slot; legendary Warp Stalkers use `ghosts` instead."""
+        self.ghosts: list[Displacer] = []
+        """Legendary pack of independent decoys — one per enemy in range."""
         self.ruse_wait = 0.0
         self.fooled = False
         """An illusion its quarry has gone for."""
@@ -798,14 +816,34 @@ class Displacer(Mortal):
         self._animate(dt)
         self._update_ghost(dt)
 
+    def _iter_ghosts(self) -> list[Displacer]:
+        if self.ghosts:
+            return list(self.ghosts)
+        return [ghost for ghost in (self.ghost, self.ghost2) if ghost is not None]
+
     def _update_ghost(self, dt: float) -> None:
-        ghost = self.ghost
-        if ghost is None:
-            return
-        ghost.update(dt)
-        if ghost.vanish >= 1.0:
-            self.ghost = None
-            self.ruse_wait = RUSE_COOLDOWN
+        vanished = []
+        living: list[Displacer] = []
+        for ghost in self._iter_ghosts():
+            ghost.update(dt)
+            if ghost.vanish >= 1.0:
+                vanished.append(ghost)
+            else:
+                living.append(ghost)
+        if self.ghosts or getattr(self, "legendary", False):
+            self.ghosts = living
+            self.ghost = living[0] if living else None
+            self.ghost2 = None
+        else:
+            self.ghost = living[0] if living else None
+            self.ghost2 = living[1] if len(living) > 1 else None
+            self.ghosts = []
+        for ghost in vanished:
+            self.ruse_wait = (
+                LEGENDARY_RUSE_COOLDOWN
+                if getattr(self, "legendary", False)
+                else RUSE_COOLDOWN
+            )
             if ghost.fooled:
                 self.fair, self.fair_left = ghost.target, FAIR_TIME
                 self.failed_ruses = 0
@@ -832,8 +870,9 @@ class Displacer(Mortal):
         """An illusion starts to vanish (it can't be seen or hit from now on)."""
         if self.illusion:
             self.vanishing = True
-        elif self.ghost is not None:
-            self.ghost.dispel()
+        else:
+            for ghost in self._iter_ghosts():
+                ghost.dispel()
 
     def ripple(self, point: Vec2) -> None:
         """An attack passes through the illusion."""
@@ -899,9 +938,11 @@ class Displacer(Mortal):
             self._retreat(target)
             return
         calm = self.harried <= 0.0
-        if self.ghost is None and self.ruse_wait <= 0.0 and calm and self._split(target):
+        if not self._iter_ghosts() and self.ruse_wait <= 0.0 and calm and self._split(target):
             return
-        ruse = self.ghost is not None and self.ghost.feinting and self.ghost.target is target
+        ruse = any(
+            ghost.feinting and ghost.target is target for ghost in self._iter_ghosts()
+        )
         ready = self._drawn(target, distance)
         if distance <= (RUSE_CREEP if ruse else HOLD_BACK):
             self.gait = "stalk"
@@ -953,7 +994,10 @@ class Displacer(Mortal):
         if target is None or self.leap_wait > 0.0:
             return False
         distance = target.center().distance_to(self.body)
-        if not POUNCE_MIN <= distance <= POUNCE_RANGE or not self._drawn(target, distance):
+        pounce_range = (
+            LEGENDARY_LEAP_RANGE if getattr(self, "legendary", False) else POUNCE_RANGE
+        )
+        if not POUNCE_MIN <= distance <= pounce_range or not self._drawn(target, distance):
             return False
         return self._pounce(target)
 
@@ -968,30 +1012,41 @@ class Displacer(Mortal):
             for i, s in enumerate(self.world.stickmen)
             if s.prey
         )
-        if self.frenzy_pounces < FRENZY_POUNCES and self.frenzy_wait <= 0.0:
-            for distance, _, prey in near:
-                if distance > FRENZY_RANGE:
-                    break
-                if distance >= POUNCE_MIN and self._pounce(prey, "frenzy"):
+        legendary = getattr(self, "legendary", False)
+        frenzy_cap = LEGENDARY_FRENZY_POUNCES if legendary else FRENZY_POUNCES
+        frenzy_range = LEGENDARY_FRENZY_RANGE if legendary else FRENZY_RANGE
+        if self.frenzy_pounces < frenzy_cap and self.frenzy_wait <= 0.0:
+            pounces = sorted(
+                ((distance, i, prey) for distance, i, prey in near
+                 if POUNCE_MIN <= distance <= frenzy_range),
+                key=lambda item: (-getattr(item[2], "target_priority", 0), item[0], item[1]),
+            )
+            for _, _, prey in pounces:
+                if self._pounce(prey, "frenzy"):
                     self.frenzy_pounces += 1
-                    self.frenzy_wait = FRENZY_EVERY
+                    self.frenzy_wait = (
+                        LEGENDARY_FRENZY_EVERY if legendary else FRENZY_EVERY
+                    )
                     return
-        close = [s for distance, _, s in near if distance <= CLOSE_RANGE]
+        close = priority_prey([s for distance, _, s in near if distance <= CLOSE_RANGE])
         if close:
             self._fight(dt, self.foe if self.foe in close else close[0])
             return
-        spent = self.frenzy_pounces >= FRENZY_POUNCES
-        if spent or not near or near[0][0] > FRENZY_RANGE:
+        spent = self.frenzy_pounces >= frenzy_cap
+        if spent or not near or near[0][0] > frenzy_range:
             self._calm_down()
             return
         self._face(near[0][2].center())
 
     def _start_frenzy(self) -> None:
-        self.frenzy_left, self.frenzy_time = FRENZY_TIME, 0.0
+        legendary = getattr(self, "legendary", False)
+        self.frenzy_left = LEGENDARY_FRENZY_TIME if legendary else FRENZY_TIME
+        self.frenzy_time = 0.0
         self.frenzy_pounces, self.frenzy_wait = 0, 0.0
 
     def _frenzy_kill(self) -> None:
-        self.frenzy_left = min(self.frenzy_left + FRENZY_KILL, FRENZY_MAX - self.frenzy_time)
+        cap = LEGENDARY_FRENZY_MAX if getattr(self, "legendary", False) else FRENZY_MAX
+        self.frenzy_left = min(self.frenzy_left + FRENZY_KILL, cap - self.frenzy_time)
 
     def _calm_down(self) -> None:
         """Out of its frenzy, back to its usual ways (and its usual pounce cooldown)."""
@@ -1009,6 +1064,18 @@ class Displacer(Mortal):
             if s.prey and s not in self._ignored_foes
         ]
         nearest = min(((d, i, s) for d, i, s in foes if d <= reach), default=None)
+        guards = [
+            (d, i, s) for d, i, s in foes
+            if d <= reach and getattr(s, "target_priority", 0)
+        ]
+        if guards:
+            priority = max(getattr(item[2], "target_priority", 0) for item in guards)
+            chosen = [
+                item
+                for item in guards
+                if getattr(item[2], "target_priority", 0) == priority
+            ]
+            return min(chosen)[2]
         current = self.foe
         held = next((d for d, _, s in foes if s is current), None)
         if self.intent is not Intent.FIGHT or held is None or held > reach + FIGHT_KEEP:
@@ -1210,35 +1277,78 @@ class Displacer(Mortal):
 
     # ----- the ruse: its illusion feints at its quarry from both sides -------------
 
+    def _make_decoy(self, target: Stickman, heading: int, side: float, phase: float) -> Displacer:
+        follower = self.follower
+        assert follower is not None
+        ghost = Displacer(self.world, follower.current_anchor(), heading, owner=self)
+        ghost.target = target
+        ghost.time = self.time + phase
+        ghost.head_yaw, ghost.tail_yaw = self.head_yaw, self.tail_yaw
+        ghost.look_up, ghost.low = self.look_up, self.low
+        ghost.side = side
+        ghost.leap_wait = 0.0
+        if getattr(self, "legendary", False):
+            ghost.ruse_left = LEGENDARY_RUSE_TIME
+        return ghost
+
     def _split(self, target: Stickman) -> bool:
-        """Send its illusion out after `target`, peeling off from where it stands."""
+        """Send illusion(s) out: one decoy, or for Warp Stalker one per enemy in range."""
         follower = self.follower
         if follower is None or follower.in_transition:
             return False
-        ghost = Displacer(self.world, follower.current_anchor(), self.heading, owner=self)
-        ghost.target = target
-        ghost.time = self.time + 3.7
-        ghost.head_yaw, ghost.tail_yaw = self.head_yaw, self.tail_yaw
-        ghost.look_up, ghost.low = self.look_up, self.low
-        ghost.leap_wait = 0.0
-        self.ghost = ghost
+        if getattr(self, "legendary", False):
+            return self._split_pack(target)
+        self.ghosts = []
+        self.ghost2 = None
+        self.ghost = self._make_decoy(target, self.heading, 1.0, 3.7)
+        return True
+
+    def _split_pack(self, primary: Stickman) -> bool:
+        """Warp Stalker: spawn an independent decoy for every adventurer in leap range."""
+        reach = LEGENDARY_LEAP_RANGE
+        prey = [
+            man
+            for man in self.world.stickmen
+            if man.prey and man.center().distance_to(self.body) <= reach
+        ]
+        prey.sort(key=lambda man: man.center().distance_to(self.body))
+        if primary.prey and primary not in prey:
+            prey.insert(0, primary)
+        if not prey:
+            return False
+        decoys: list[Displacer] = []
+        for index, foe in enumerate(prey[:LEGENDARY_MAX_DECOYS]):
+            decoys.append(
+                self._make_decoy(
+                    foe,
+                    self.heading if index % 2 == 0 else -self.heading,
+                    1.0 if index % 2 == 0 else -1.0,
+                    1.1 + 0.55 * index,
+                )
+            )
+        self.ghosts = decoys
+        self.ghost = decoys[0]
+        self.ghost2 = None
+        self.world.spells.sparkle(self.body, "magic", 22, 220.0)
         return True
 
     def _drawn(self, target: Stickman, distance: float) -> bool:
         """Whether it may pounce on `target`: its illusion has his attention (or he was
         fighting the illusion as it vanished)."""
-        ghost = self.ghost
-        if ghost is not None and ghost.target is target and ghost.feinting:
-            if self._distracted(target):
+        for ghost in self._iter_ghosts():
+            if ghost.target is target and ghost.feinting and self._distracted(target, ghost):
                 return True
         if self.fair is target and self.fair_left > 0.0:
             return True
         return False
 
-    def _distracted(self, target: Stickman) -> bool:
+    def _distracted(self, target: Stickman, ghost: Displacer | None = None) -> bool:
         """Whether `target` is taken up with its illusion: going for it once it's feinted
         at him (or swinging at it), or, on his feet, turned away from the real beast."""
-        ghost = self.ghost
+        ghost = ghost or next(
+            (decoy for decoy in self._iter_ghosts() if decoy.target is target),
+            self.ghost,
+        )
         if ghost is None:
             return True
         weapon = target.weapon
@@ -1280,7 +1390,11 @@ class Displacer(Mortal):
         if distance < POUNCE_MIN:
             self._cross(target)
             return
-        if distance <= POUNCE_RANGE and self._feint(target):
+        # Warp Stalker decoys leap onto their own quarry for real; base illusions feint.
+        lethal = getattr(self.owner, "legendary", False)
+        if distance <= POUNCE_RANGE and (
+            self._pounce(target) if lethal else self._feint(target)
+        ):
             return
         self._replan_wait -= dt
         if self._replan_wait > 0.0:
@@ -1340,13 +1454,23 @@ class Displacer(Mortal):
         if reach > POUNCE_HIT:
             return
         leap.struck = True
-        push = self.velocity.normalized() * POUNCE_PUSH + Vec2(0.0, -120.0)
-        death = (
-            "Mauled by a frenzied displacer beast!"
-            if leap.kind == "frenzy"
-            else "Mauled by the displacer beast!"
-        )
-        leap.killed = quarry.hurt_from(self, POUNCE_DAMAGE, middle, push, "displacer", death)
+        legendary = getattr(self, "legendary", False) or getattr(self.owner, "legendary", False)
+        decoy = self.illusion and getattr(self.owner, "legendary", False)
+        shove = LEGENDARY_POUNCE_PUSH if legendary else POUNCE_PUSH
+        push = self.velocity.normalized() * shove + Vec2(0.0, -120.0)
+        if decoy:
+            death = "Pounced by a Warp Stalker decoy!"
+            damage = LEGENDARY_DECOY_DAMAGE
+        elif legendary:
+            death = "Torn apart by the Warp Stalker!"
+            damage = LEGENDARY_POUNCE_DAMAGE
+        elif leap.kind == "frenzy":
+            death = "Mauled by a frenzied displacer beast!"
+            damage = POUNCE_DAMAGE
+        else:
+            death = "Mauled by the displacer beast!"
+            damage = POUNCE_DAMAGE
+        leap.killed = quarry.hurt_from(self, damage, middle, push, "displacer", death)
         if leap.killed and leap.kind == "frenzy" and self.frenzy_left > 0.0:
             self._frenzy_kill()
 
@@ -1382,7 +1506,10 @@ class Displacer(Mortal):
 
     def _pick_goal(self) -> None:
         random = self.world.random
-        if self.leap_wait <= 0.0 and random.random() < LEAP_CHANCE and self._leap_somewhere():
+        leap_chance = (
+            LEGENDARY_LEAP_CHANCE if getattr(self, "legendary", False) else LEAP_CHANCE
+        )
+        if self.leap_wait <= 0.0 and random.random() < leap_chance and self._leap_somewhere():
             return
         for _ in range(10):
             anchor = self._random_anchor()
@@ -1405,7 +1532,10 @@ class Displacer(Mortal):
                 return False
             if anchor.surface.box == here.box and anchor.surface.box is not None:
                 continue
-            if not LEAP_MIN <= anchor.point.distance_to(self.position) <= LEAP_RANGE:
+            leap_range = (
+                LEGENDARY_LEAP_RANGE if getattr(self, "legendary", False) else LEAP_RANGE
+            )
+            if not LEAP_MIN <= anchor.point.distance_to(self.position) <= leap_range:
                 continue
             if self._try_leap(anchor, "leap"):
                 return True
@@ -1482,6 +1612,12 @@ class Displacer(Mortal):
         anchor = self._beside(target)
         if anchor is None or self._arc(self.body, anchor, least=_least(kind)) is None:
             return False
+        if getattr(self, "legendary", False) and not self.illusion:
+            # Fold Strike: leave a violent warp bloom at the crouch, then again on land.
+            self.world.spells.sparkle(self.body, "magic", 28, 260.0)
+            self.world.debris.burst(
+                self.body, Vec2(0.0, -1.0), 10, 200.0, spread=2.8, puffs=12, scale=0.9
+            )
         self._crouch(Leap(anchor, kind, target))
         return True
 
@@ -1556,7 +1692,8 @@ class Displacer(Mortal):
             self._set_heading(1 if velocity.x > 0 else -1)
         if leap.kind in POUNCES:
             self.leap_wait = POUNCE_COOLDOWN
-            if self.illusion:
+            # Base illusions feint harmlessly; Warp Stalker decoys keep their quarry.
+            if self.illusion and not getattr(self.owner, "legendary", False):
                 leap.quarry = None
         elif leap.kind == "leap":
             self.leap_wait = LEAP_COOLDOWN
@@ -1580,12 +1717,14 @@ class Displacer(Mortal):
         distance = offset.length()
         if distance < 1.0:
             return None
-        base = max(least, clamp(0.22 + distance / LEAP_PACE, 0.28, 0.85))
+        legendary = getattr(self, "legendary", False)
+        pace = LEAP_PACE * (1.25 if legendary else 1.0)
+        base = max(least, clamp(0.22 + distance / pace, 0.28, 0.85))
         surface = anchor.surface
         for scale in (1.0, 0.8, 1.25, 1.55, 0.65, 1.9):
             time = base * scale
             velocity = Vec2(offset.x / time, (offset.y - 0.5 * GRAVITY * time * time) / time)
-            if velocity.length() > MAX_LEAP_SPEED:
+            if velocity.length() > MAX_LEAP_SPEED * (1.2 if legendary else 1.0):
                 continue
             arriving = velocity.y + GRAVITY * time
             if surface.walkable and arriving < 60.0:
@@ -1918,8 +2057,8 @@ class Displacer(Mortal):
         self._ride(change)
         if self.follower is None and self.leap is None:
             self.dispel()
-        if self.ghost is not None:
-            self.ghost.terrain_changed(change)
+        for ghost in self._iter_ghosts():
+            ghost.terrain_changed(change)
 
     def _ride(self, change: TerrainChange) -> None:
         seen = self.look_center

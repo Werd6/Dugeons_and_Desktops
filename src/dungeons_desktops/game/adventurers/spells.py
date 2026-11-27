@@ -69,6 +69,8 @@ class SpellHit:
     """Cast by a thrall: `monster` is the adventurer it hit."""
     owner: object = None
     """Who cast, shot or called it."""
+    kind: str = "magic"
+    """The projectile effect, used for impact behavior such as life drain."""
 
 
 @dataclass
@@ -85,6 +87,8 @@ class Missile:
 
     @property
     def flight(self) -> float:
+        if self.kind == "life_drain":
+            return max(0.16, self.origin.distance_to(self.target) / 680.0)
         return max(0.25, self.origin.distance_to(self.target) / MISSILE_SPEED)
 
     def dart(self, index: int, t: float) -> Vec2:
@@ -92,6 +96,11 @@ class Missile:
         if self.kind == "fire":
             return self.origin + line * t
         side = line.normalized().rotated(math.pi / 2)
+        if self.kind == "life_drain":
+            wave = math.sin(math.tau * 2.7 * t + math.sin(t * 31.0) * 1.3)
+            fork = 0.45 * math.sin(math.tau * 7.1 * t + 0.8)
+            sway = 13.0 * math.sin(math.pi * t) * (wave + fork)
+            return self.origin + line * t + side * sway
         phase = 2.0 * math.pi * index / MISSILE_DARTS
         wave = math.sin(2.0 * math.pi * MISSILE_WAVES * t + phase)
         return self.origin + line * t + side * (MISSILE_SWAY * math.sin(math.pi * t) * wave)
@@ -177,7 +186,8 @@ class Spells:
         kind: str = "magic",
     ) -> None:
         missile = Missile(origin, at, monster, hostile, owner=owner, kind=kind)
-        missile.darts = [[origin] for _ in range(1 if kind == "fire" else MISSILE_DARTS)]
+        single = kind in ("fire", "life_drain")
+        missile.darts = [[origin] for _ in range(1 if single else MISSILE_DARTS)]
         self.missiles.append(missile)
 
     def shoot(
@@ -238,7 +248,8 @@ class Spells:
             t = min(1.0, missile.age / missile.flight)
             for index, trail in enumerate(missile.darts):
                 trail.append(missile.dart(index, t))
-                del trail[:-DART_TRAIL]
+                keep = 18 if missile.kind == "life_drain" else DART_TRAIL
+                del trail[:-keep]
             if t < 1.0:
                 flying.append(missile)
             else:
@@ -253,6 +264,7 @@ class Spells:
                             velocity,
                             missile.hostile,
                             missile.owner,
+                            missile.kind,
                         )
                     )
         self.missiles = flying

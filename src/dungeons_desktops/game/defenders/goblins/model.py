@@ -8,6 +8,7 @@ Every length (bones, gait, speed) is the reference size times `SCALE`.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.navigation.planner import MoveSettings
@@ -62,8 +63,8 @@ HANG_DEPTH = 40.0 * SCALE
 """Hands to feet when hanging from a ceiling (matches `hang.hang_depth` of the goblin)."""
 
 
-def _limbs(side: str) -> tuple[BoneDef, ...]:
-    s = SCALE
+def _limbs(side: str, scale: float) -> tuple[BoneDef, ...]:
+    s = scale
     return (
         BoneDef(f"upper_arm_{side}", "torso", 8.0 * s, math.pi, -3.0, 3.0, mass=0.5),
         BoneDef(f"lower_arm_{side}", f"upper_arm_{side}", 8.0 * s, 0.0, -2.6, 0.0, mass=0.4),
@@ -81,14 +82,34 @@ def _limbs(side: str) -> tuple[BoneDef, ...]:
     )
 
 
-def build_goblin() -> BipedLayout:
-    s = SCALE
+def build_goblin(*, size: float = 1.0) -> BipedLayout:
+    """`size` scales the figure (Goblin King uses 2); stride and line widths follow."""
+    s = SCALE * size
+    limb = 0.65 * s
     bones = (
         BoneDef("pelvis", None, 4.0 * s, UP, mass=1.5),
         BoneDef("torso", "pelvis", 10.0 * s, 0.0, -0.8, 0.8, mass=2.5),
         BoneDef("head", "torso", 7.0 * s, 0.0, -0.9, 0.9, mass=2.0),
-        *_limbs("l"),
-        *_limbs("r"),
+        *_limbs("l", s),
+        *_limbs("r", s),
+    )
+    walk = replace(
+        RUN,
+        speed=240.0 * s,
+        stride=36.0 * s,
+        step_height=4.0 * s,
+        hip_bob=1.2 * s,
+        stance_width=3.5 * s,
+    )
+    climb = replace(
+        CLIMB,
+        stride=18.0 * limb,
+        hip_offset=12.0 * limb,
+        hip_above_contact=12.0 * limb,
+        hand_above_hip=27.0 * limb,
+        grip_inset=1.5 * limb,
+        pull_off=2.5 * limb,
+        ledge_reach=3.0 * limb,
     )
     return BipedLayout(
         skeleton=Skeleton(bones),
@@ -104,7 +125,7 @@ def build_goblin() -> BipedLayout:
             IkChain("arm_r", ("upper_arm_r", "lower_arm_r"), bend=-1),
         ),
         head_radius=7.5 * s,
-        walk=RUN,
-        climb=CLIMB,
+        walk=walk,
+        climb=climb,
         scale=s,
     )

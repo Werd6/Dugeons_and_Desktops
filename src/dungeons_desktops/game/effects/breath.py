@@ -85,6 +85,8 @@ class Mote:
     spin: float = 0.0
     floor: float | None = None
     """Where a falling mote lands (bounces, or splashes for a drip)."""
+    palette: str = ""
+    """Optional colour set: "" default, "magenta" for the legendary hydra's venom."""
 
     @property
     def t(self) -> float:
@@ -106,7 +108,7 @@ def step_motes(motes: list[Mote], dt: float, random: Random) -> list[Mote]:
         if floor is not None and mote.position.y > floor:
             mote.position = Vec2(mote.position.x, floor)
             if mote.kind == "drip":
-                alive += splash(mote.position, mote.size, random)
+                alive += splash(mote.position, mote.size, random, mote.palette)
                 continue
             mote.velocity = Vec2(mote.velocity.x * 0.45, -mote.velocity.y * 0.3)
             mote.spin *= 0.5
@@ -114,16 +116,24 @@ def step_motes(motes: list[Mote], dt: float, random: Random) -> list[Mote]:
     return alive[-MOTE_LIMIT:]
 
 
-def splash(point: Vec2, size: float, random: Random) -> list[Mote]:
+def splash(point: Vec2, size: float, random: Random, palette: str = "") -> list[Mote]:
     """Acid hitting a surface: a sizzling spot and a wisp of steam."""
     return [
-        Mote("sizzle", point, Vec2(0.0, 0.0), random.uniform(0.5, 0.9), size * 1.6),
+        Mote(
+            "sizzle",
+            point,
+            Vec2(0.0, 0.0),
+            random.uniform(0.5, 0.9),
+            size * 1.6,
+            palette=palette,
+        ),
         Mote(
             "steam",
             point + Vec2(0.0, -1.0),
             Vec2(random.gauss(0.0, 6.0), -random.uniform(10.0, 25.0)),
             random.uniform(0.5, 0.9),
             size * 1.2,
+            palette=palette,
         ),
     ]
 
@@ -139,6 +149,8 @@ class Demise:
     motes: list[Mote] = field(default_factory=list)
     rest: float = 0.0
     """The lowest point of the body: where the puddle spreads and shards land."""
+    palette: str = ""
+    """Optional colour set: "" default, "magenta" for the legendary hydra's venom."""
     _carry: float = 0.0
     _shattered: bool = False
 
@@ -265,6 +277,7 @@ class Demise:
                     Vec2(random.gauss(0.0, 4.0), -random.uniform(8.0, 18.0)),
                     random.uniform(0.6, 1.1),
                     random.uniform(1.0, 1.8),
+                    palette=self.palette,
                 )
             return Mote(
                 "bubble",
@@ -272,6 +285,7 @@ class Demise:
                 Vec2(0.0, -random.uniform(2.0, 6.0)),
                 random.uniform(0.3, 0.7),
                 random.uniform(0.5, 1.2),
+                palette=self.palette,
             )
         return Mote(
             "glint",

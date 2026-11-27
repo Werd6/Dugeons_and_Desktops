@@ -21,9 +21,15 @@ from dungeons_desktops.core.clock import FixedStepClock
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.game.actors.base import Actor, surface_below
 from dungeons_desktops.game.adventurers.actor import GOBLIN_DAMAGE, Stickman
-from dungeons_desktops.game.adventurers.alchemy import Explosion, Vials
+from dungeons_desktops.game.adventurers.alchemy import (
+    CLING_DAMAGE,
+    ClingingOoze,
+    Explosion,
+    Vials,
+)
 from dungeons_desktops.game.adventurers.combat import ADVENTURER_DAMAGE
 from dungeons_desktops.game.adventurers.spells import Spells
+from dungeons_desktops.game.defenders.aboleth.actor import Aboleth
 from dungeons_desktops.game.defenders.chimera.actor import Chimera
 from dungeons_desktops.game.defenders.displacer.actor import Displacer
 from dungeons_desktops.game.defenders.dragon.actor import Dragon
@@ -31,9 +37,9 @@ from dungeons_desktops.game.defenders.drakes.drake import Drake
 from dungeons_desktops.game.defenders.drakes.kobold import Kobold, Traps
 from dungeons_desktops.game.defenders.drow.actor import Drow, DrowPack, Lizard
 from dungeons_desktops.game.defenders.drow.darkness import Darkness
-from dungeons_desktops.game.defenders.elementals.actor import Elemental
 from dungeons_desktops.game.defenders.goblins.actor import SPEAR_PUSH, Goblin, GoblinPack
 from dungeons_desktops.game.defenders.goblins.spears import Spears
+from dungeons_desktops.game.defenders.graveknights.actor import Graveknight, GraveknightPack
 from dungeons_desktops.game.defenders.hydra.actor import Hydra
 from dungeons_desktops.game.defenders.lich.actor import Lich
 from dungeons_desktops.game.defenders.lich.skeletons import (
@@ -47,12 +53,13 @@ from dungeons_desktops.game.defenders.mimic.actor import Mimic
 from dungeons_desktops.game.defenders.mindflayer.actor import MindFlayer
 from dungeons_desktops.game.defenders.mindflayer.devourer import Devourer
 from dungeons_desktops.game.defenders.minotaur.actor import Minotaur
-from dungeons_desktops.game.defenders.ooze.actor import Ooze
 from dungeons_desktops.game.defenders.worm.actor import BORDER_DEPTH, Worm
+from dungeons_desktops.game.defenders.zombies.actor import Zombie, ZombiePack
+from dungeons_desktops.game.effects.chromatic import ChromaticEffects
 from dungeons_desktops.game.effects.debris import Debris
 from dungeons_desktops.game.effects.gore import Gore
 from dungeons_desktops.game.effects.projectiles import Projectiles
-from dungeons_desktops.game.heroes.dio.actor import Dio
+from dungeons_desktops.game.progression import Progression
 from dungeons_desktops.game.world.combat import CombatMixin
 from dungeons_desktops.game.world.spawning import SpawningMixin
 from dungeons_desktops.game.world.terrain import TerrainMixin
@@ -83,6 +90,7 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
         left: float = 0.0,
         ceiling: float | None = None,
         seed: int | None = 7,
+        progression: Progression | None = None,
     ) -> None:
         """`left`..`width` is the horizontal extent; a `ceiling` makes its sides climbable."""
         self.boxes = list(boxes)
@@ -99,14 +107,20 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
         self.spears = Spears()
         self.spells = Spells(self.random)
         self.necromancy = Necromancy(self)
+        self.chromatic = ChromaticEffects(self)
         self.kills = 0
         """Stickmen killed by any monster so far."""
+        self.progression = progression if progression is not None else Progression()
         self.kill_marks: list[KillMark] = []
         self.stickmen: list[Stickman] = []
-        self.heroes: list[Dio] = []
+        self.heroes: list[Stickman] = []
         """Named heroes also remain in `stickmen` for shared prey and combat handling."""
         self.goblins: list[Goblin] = []
         self.goblin_pack = GoblinPack(self)
+        self.graveknights: list[Graveknight] = []
+        self.graveknight_pack = GraveknightPack(self)
+        self.zombies: list[Zombie] = []
+        self.zombie_pack = ZombiePack(self)
         self.skeletons: list[Skeleton] = []
         self.skeleton_pack = SkeletonPack(self)
         self.worms: list[Worm] = []
@@ -126,12 +140,11 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
         self.drow_pack = DrowPack(self)
         self.darkness = Darkness(self)
         self.chimeras: list[Chimera] = []
-        self.elementals: list[Elemental] = []
-        self.oozes: list[Ooze] = []
+        self.aboleths: list[Aboleth] = []
         self.fallen: list[
             Goblin
+            | Graveknight
             | Chimera
-            | Elemental
             | Drake
             | Kobold
             | Dragon
@@ -140,7 +153,7 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
             | Devourer
             | Displacer
             | Minotaur
-            | Ooze
+            | Aboleth
             | Lich
             | Mimic
             | Hydra
@@ -166,9 +179,25 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
     def mark_kill(self, point: Vec2) -> None:
         self.kill_marks.append(KillMark(point))
 
+    def record_enemy_kill(self, victim: Stickman, source: str, point: Vec2) -> None:
+        """Count a confirmed death; a thrall's death belongs to the mind flayer."""
+        if victim.thrall:
+            source = "mindflayer"
+        self.kills += 1
+        self.mark_kill(point)
+        self.progression.record_kill(victim.variant, source)
+
     @property
     def actors(self) -> list[Actor]:
-        return [*self.stickmen, *self.goblins, *self.skeletons, *self.drow, *self.mindflayers]
+        return [
+            *self.stickmen,
+            *self.goblins,
+            *self.graveknights,
+            *self.zombies,
+            *self.skeletons,
+            *self.drow,
+            *self.mindflayers,
+        ]
 
     @property
     def thralls(self) -> list[Stickman]:
@@ -186,15 +215,37 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
             self._step(self.clock.step)
 
     def _step(self, dt: float) -> None:
+        self.chromatic.update(dt)
         self.projectiles.update(dt, MISSILE_BOXES, self.floor_y, self.width)
-        for stickman in self.stickmen:
-            stickman.update(dt)
+        # A Graveknight can replace its killer during this loop. Iterate a snapshot so
+        # removing that adventurer does not skip the next member of the live roster.
+        for stickman in tuple(self.stickmen):
+            if stickman not in self.stickmen:
+                continue
+            if not self._monster_blocked(stickman):
+                stickman.update(dt)
         self.goblin_pack.update(dt)
         for goblin_ in self.goblins:
-            goblin_.update(dt)
+            if not self._monster_blocked(goblin_):
+                goblin_.update(dt)
+        self.graveknight_pack.update(dt)
+        moving_graveknights = set()
+        for graveknight in self.graveknights:
+            if not self._monster_blocked(graveknight):
+                graveknight.update(dt)
+                moving_graveknights.add(graveknight)
+        self.graveknight_pack.separate(dt, moving_graveknights)
+        self.zombie_pack.update(dt)
+        moving_zombies = set()
+        for zombie in tuple(self.zombies):
+            if not self._monster_blocked(zombie):
+                zombie.update(dt)
+                moving_zombies.add(zombie)
+        self.zombie_pack.separate(dt, moving_zombies)
         self.skeleton_pack.update(dt)
         for skeleton in self.skeletons:
-            skeleton.update(dt)
+            if not self._monster_blocked(skeleton):
+                skeleton.update(dt)
         self._crumble_skeletons(dt)
         for spear, stickman in self.spears.update(
             dt, MISSILE_BOXES, self.floor_y, self.width, self._spear_hits
@@ -202,39 +253,52 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
             push = spear.velocity.normalized() * SPEAR_PUSH + Vec2(0.0, -80.0)
             stickman.hurt(GOBLIN_DAMAGE, spear.position, push, "goblin", "Speared by a goblin!")
         for worm in self.worms:
-            worm.update(dt)
+            if not self._monster_blocked(worm):
+                worm.update(dt)
         for dragon in self.dragons:
-            dragon.update(dt)
+            if not self._monster_blocked(dragon):
+                dragon.update(dt)
         for flayer in self.mindflayers:
-            flayer.update(dt)
+            if not self._monster_blocked(flayer):
+                flayer.update(dt)
         for devourer in self.devourers:
-            devourer.update(dt)
+            if not self._monster_blocked(devourer):
+                devourer.update(dt)
         for displacer in self.displacers:
-            displacer.update(dt)
+            if not self._monster_blocked(displacer):
+                displacer.update(dt)
         for minotaur in self.minotaurs:
-            minotaur.update(dt)
-        for ooze in self.oozes:
-            ooze.update(dt)
+            if not self._monster_blocked(minotaur):
+                minotaur.update(dt)
+        for aboleth in self.aboleths:
+            if not self._monster_blocked(aboleth):
+                aboleth.update(dt)
         for chimera in self.chimeras:
-            chimera.update(dt)
-        for elemental in self.elementals:
-            elemental.update(dt)
+            if not self._monster_blocked(chimera):
+                chimera.update(dt)
         for lich in self.liches:
-            lich.update(dt)
+            if not self._monster_blocked(lich):
+                lich.update(dt)
         for mimic in self.mimics:
-            mimic.update(dt)
+            if not self._monster_blocked(mimic):
+                mimic.update(dt)
         for hydra in self.hydras:
-            hydra.update(dt)
+            if not self._monster_blocked(hydra):
+                hydra.update(dt)
         for drake in self.drakes:
-            drake.update(dt)
+            if not self._monster_blocked(drake):
+                drake.update(dt)
         for kobold in self.kobolds:
-            kobold.update(dt)
+            if not self._monster_blocked(kobold):
+                kobold.update(dt)
         self.traps.update(dt)
         for lizard in self.lizards:
-            lizard.update(dt)
+            if not self._monster_blocked(lizard):
+                lizard.update(dt)
         self.drow_pack.update(dt)
         for drow in self.drow:
-            drow.update(dt)
+            if not self._monster_blocked(drow):
+                drow.update(dt)
         self.darkness.update(dt)
         self.necromancy.update(dt)
         for hit in self.spells.update(
@@ -248,15 +312,29 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
             self.prey_at,
         ):
             push = hit.velocity.normalized() * 140.0 + Vec2(0.0, -60.0)
+            before = getattr(hit.monster, "hp", 0)
             if hit.hostile:
                 assert isinstance(hit.monster, Stickman)
-                self._thrall_hit(hit.monster, hit.point, push)
+                arrow_hit = getattr(hit.owner, "arrow_hit", None)
+                if arrow_hit is not None:
+                    arrow_hit(hit.monster, hit.point, push)
+                else:
+                    self._thrall_hit(hit.monster, hit.point, push)
             else:
                 self.hurt_monster(
                     hit.monster, ADVENTURER_DAMAGE, hit.point, push, ranged=True, attacker=hit.owner
                 )
+            after = getattr(hit.monster, "hp", before)
+            if (
+                hit.kind == "life_drain"
+                and before > after
+                and isinstance(hit.owner, Stickman)
+                and hit.owner.animated
+            ):
+                hit.owner.heal(ADVENTURER_DAMAGE)
         for body in self.fallen:
-            body.update_dead(dt)
+            if not self.chromatic.dying(body):
+                body.update_dead(dt)
         self.debris.update(dt)
         for mark in self.kill_marks:
             mark.age += dt
@@ -269,21 +347,66 @@ class SimWorld(SpawningMixin, CombatMixin, TerrainMixin):
             bursts.append(burst)
         self._detonations.clear()
         for burst in bursts:
+            if getattr(burst.owner, "variant", None) == "hero_alchemist":
+                if burst.target is not None:
+                    locate = self.locate_prey if burst.hostile else self.locate
+                    if (anchor := locate(burst.target)) is not None:
+                        self.vials.cling(
+                            burst.target,
+                            burst.center,
+                            anchor,
+                            burst.owner,
+                            burst.hostile,
+                        )
+                continue
             if burst.hostile:
                 self._blast_prey(burst.center, burst.radius)
             else:
                 self._blast_monsters(burst.center, burst.radius, burst.owner)
+        self.vials.update_clinging(dt, self._locate_ooze_target, self._damage_clinging_ooze)
         self._despawn()
+
+    def _monster_blocked(self, monster: object) -> bool:
+        if self.chromatic.blocked(monster):
+            return True
+        for hero in self.heroes:
+            grasp = getattr(hero, "skeletal_grasp", None)
+            if grasp is not None and grasp.holds(monster):
+                return True
+        return False
+
+    def _locate_ooze_target(self, target: object) -> Vec2 | None:
+        return self.locate(target) or self.locate_prey(target)
+
+    def _damage_clinging_ooze(self, ooze: ClingingOoze) -> bool:
+        if ooze.hostile:
+            target = ooze.target
+            if not isinstance(target, Stickman) or not target.prey:
+                return True
+            was_animated = target.animated
+            self._thrall_hit(target, ooze.position, Vec2(0.0, 0.0))
+            return was_animated and not target.animated
+        return self.hurt_monster(
+            ooze.target,
+            CLING_DAMAGE,
+            ooze.position,
+            Vec2(0.0, 0.0),
+            ranged=True,
+            attacker=ooze.owner,
+        )
 
     def raise_skeleton(self, body: Stickman) -> Skeleton | None:
         """`body`, killed by the lich, rising as a skeleton where it fell (if a lich
         still stands, the corpse is still there, and there's room in his host)."""
         if not self.liches or len(self.skeletons) >= SKELETON_CAP:
             return None
-        if body not in self.stickmen or body.animated or body.burn is not None:
+        if body not in self.stickmen or body.animated or body.gone or body.burn is not None:
             return None
         anchor = surface_below(self.planner, body.center())
         skeleton = Skeleton(self, anchor, body.variant)
+        skeleton.legendary_mage = any(
+            getattr(lich, "legendary", False) and not lich.dead for lich in self.liches
+        )
         skeleton.follower.facing = body.facing
         self.stickmen.remove(body)
         self.skeletons.append(skeleton)

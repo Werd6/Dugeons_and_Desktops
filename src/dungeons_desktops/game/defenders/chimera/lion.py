@@ -3,8 +3,10 @@ getting about, a little slower, and never upside down.
 
 It has its own terrain and planner (`world.chimera_planner`): window tops, the floor,
 and flat against window sides and the screen edges, rolling its body round each
-corner, but no undersides. Planned jumps and drops become ballistic leaps, and on top
-of the planner it leaps straight across gaps to another window within `LEAP_RANGE`.
+corner, but no undersides. Narrow slots keep their full walls (`wall_clearance=0`);
+while climbing it clips through the window beside rather than flattening into a belly
+crawl. Planned jumps and drops become ballistic leaps, and on top of the planner it
+leaps straight across gaps to another window within `LEAP_RANGE`.
 
 Every leap goes crouch (`CROUCH_TIME`), flight (an exact ballistic arc to the surface
 it aims for, checked clear of every window before it goes), landing absorb
@@ -647,7 +649,14 @@ class LionController:
 
     def _offset(self, body: Vec2) -> Vec2:
         """`body` pushed out to its height off every surface it's nearer than that to
-        (in an inside corner it sits back from both)."""
+        (in an inside corner it sits back from both).
+
+        While climbing a wall, skip neighboring surfaces so a tight slot doesn't squash
+        it into a belly crawl — it keeps its normal hip height and clips through.
+        """
+        support = self.support
+        if support is not None and not support.walkable:
+            return body
         for _ in range(2):
             pushed = False
             for surface in self.planner.surfaces:

@@ -143,6 +143,9 @@ class SnakeTail:
             else:
                 distance = middle.distance_to(chimera.shoulder)
                 inside = distance <= FRONT_RANGE
-            if inside and distance < best_distance:
+            priority = getattr(stickman, "target_priority", 0)
+            previous = getattr(best, "target_priority", 0)
+            preferred = priority > previous or (priority == previous and distance < best_distance)
+            if inside and preferred:
                 best, best_distance = stickman, distance
         return best

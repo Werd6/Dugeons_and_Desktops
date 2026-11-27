@@ -66,3 +66,19 @@ def test_override_drags_a_hand():
 
     hand = forward_kinematics(driver.layout.skeleton, driver.pose)[arm.bones[-1]].end
     assert hand.distance_to(target) < 1.0
+
+
+def test_backpedalling_plants_steps_behind_the_body_without_sliding():
+    driver = make_driver()
+    previous = driver.foot_positions()
+    planted = 0
+    for _ in range(180):
+        driver.step_to(driver.hip_x - driver.settings.speed * DT, DT)
+        current = driver.foot_positions()
+        for foot, before, after in zip(driver._feet, previous, current, strict=True):
+            assert abs(after.x - driver.hip_x) < driver.settings.stride
+            if not foot.swinging and after.y == GROUND and before.y == GROUND:
+                assert after.x == pytest.approx(before.x)
+                planted += 1
+        previous = current
+    assert driver.hip_x < 0 and planted > 30

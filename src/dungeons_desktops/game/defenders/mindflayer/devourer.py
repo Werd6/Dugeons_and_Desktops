@@ -27,6 +27,12 @@ if TYPE_CHECKING:
     from dungeons_desktops.game.world.simulation import SimWorld
 
 DEVOURER_HP = 3
+HERALD_HP = 12
+HERALD_SIZE = 2.2
+"""Drawn and fought scale for the Elder Thing Herald placeholder."""
+HERALD_DAMAGE = 2
+RIFT_TIME = 0.85
+"""How long the summoning rift stays visible after the Herald arrives."""
 
 GRAVITY = 900.0
 CRAWL_SPEED = {Move.WALK: 95.0, Move.CLIMB: 70.0, Move.HANG: 70.0}
@@ -55,10 +61,16 @@ RECOIL = Vec2(110.0, -170.0)
 ZERO = Vec2(0.0, 0.0)
 UPRIGHT = Vec2(0.0, -1.0)
 
+# Kept for older imports / tests that still mention the retired stationary brain.
+ELDER_BRAIN_HP = HERALD_HP
+ELDER_WAVE_TIME = RIFT_TIME
+
 
 class Devourer(Mortal):
     max_hp = DEVOURER_HP
     linger = 2.5
+    size = 1.0
+    """Drawn scale; Herald grows this for the placeholder aberration."""
 
     def __init__(
         self, world: SimWorld, position: Vec2, velocity: Vec2 = ZERO, facing: int = 1
@@ -86,7 +98,7 @@ class Devourer(Mortal):
         return self.world.goblin_planner
 
     def center(self) -> Vec2:
-        return self.position + self.up * BODY_HEIGHT
+        return self.position + self.up * (BODY_HEIGHT * self.size)
 
     @property
     def airborne(self) -> bool:
@@ -209,7 +221,7 @@ class Devourer(Mortal):
         self.follower = None
         self.up = UPRIGHT
         self.forward = Vec2(float(self.facing), 0.0)
-        self.position = center - UPRIGHT * BODY_HEIGHT
+        self.position = center - UPRIGHT * (BODY_HEIGHT * self.size)
         self.velocity = ZERO
 
     def _attach(self, anchor: Anchor) -> None:
@@ -271,17 +283,18 @@ class Devourer(Mortal):
         return [s for s in self.planner.surfaces if s.walkable]
 
     def _bite(self, target: Stickman) -> None:
-        if not target.hits(self.center(), BITE_MARGIN):
+        margin = BITE_MARGIN * self.size
+        if not target.hits(self.center(), margin):
             return
         push = Vec2(self.facing * 120.0, -60.0)
-        target.hurt_from(
-            self,
-            DEVOURER_DAMAGE,
-            self.center(),
-            push,
-            "devourer",
-            "Devoured by an intellect devourer!",
+        damage = HERALD_DAMAGE if getattr(self, "legendary", False) else DEVOURER_DAMAGE
+        death = (
+            "Torn apart by the Elder Thing Herald!"
+            if getattr(self, "legendary", False)
+            else "Devoured by an intellect devourer!"
         )
+        source = "elder thing herald" if getattr(self, "legendary", False) else "devourer"
+        target.hurt_from(self, damage, self.center(), push, source, death)
         self.bite_wait = BITE_COOLDOWN
         away = 1 if self.center().x >= target.center().x else -1
         self._loose()
@@ -318,3 +331,25 @@ class Devourer(Mortal):
         self.down_time += dt
         if self.follower is None:
             self._fly(dt, cling=False)
+
+
+class ElderThingHerald(Devourer):
+    """Aberration pulled through a thrall-forged rift. Placeholder: a huge intellect devourer."""
+
+    max_hp = HERALD_HP
+    linger = 3.5
+    size = HERALD_SIZE
+
+    def __init__(self, world: SimWorld, position: Vec2, facing: int = 1) -> None:
+        super().__init__(world, position, facing=facing)
+        self.legendary = True
+        self.rift_age = 0.0
+        """Seconds since the rift opened; drawn while under `RIFT_TIME`."""
+
+    def update(self, dt: float) -> None:
+        self.rift_age += dt
+        super().update(dt)
+
+
+# Back-compat alias while callers/tests catch up.
+ElderBrain = ElderThingHerald

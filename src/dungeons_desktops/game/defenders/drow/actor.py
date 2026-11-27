@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp
 from dungeons_desktops.game.actors.base import Actor
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.adventurers.actor import Stickman
 from dungeons_desktops.game.defenders.displacer import actor as displacer
 from dungeons_desktops.game.defenders.displacer.actor import Displacer, Intent, along
@@ -314,7 +315,14 @@ class Lizard(Displacer):
 
     def _fly_bolts(self, dt: float) -> list[Missile]:
         death = "Shot by a drow crossbow!"
-        return step_arrows(self.world, self.bolts, dt, BOLT_GRAVITY, CROSSBOW_DAMAGE, "drow", death)
+        poison = (
+            (lambda target: target.poison_for(5.0))
+            if getattr(self, "legendary", False)
+            else None
+        )
+        return step_arrows(
+            self.world, self.bolts, dt, BOLT_GRAVITY, CROSSBOW_DAMAGE, "drow", death, poison
+        )
 
     def _flicker(self, dt: float) -> None:
         self._flick_wait -= dt
@@ -342,7 +350,7 @@ class Lizard(Displacer):
                 self._start_bite()
                 return
         body = self.center()
-        near = min(prey, key=lambda s: s.center().distance_to(body), default=None)
+        near = min(priority_prey(prey), key=lambda s: s.center().distance_to(body), default=None)
         distance = near.center().distance_to(body) if near is not None else math.inf
         if near is not None and distance < SCURRY_RANGE and self.scurry_wait <= 0.0:
             self.scurry_wait = SCURRY_WAIT
@@ -446,6 +454,7 @@ class Lizard(Displacer):
         self.cast = max(0.0, self.cast - dt)
         shoulder = self.rider_shoulder
         prey = [s for s in self._prey() if s.center().distance_to(shoulder) < CROSSBOW_RANGE]
+        prey = priority_prey(prey)
         lit = [s for s in prey if s.faerie > 0.0]
         mark = min(lit or prey, key=lambda s: s.center().distance_to(shoulder), default=None)
         self.mark = mark
@@ -475,13 +484,15 @@ class Lizard(Displacer):
             count = sum(1 for o in prey if o.center().distance_to(center) <= GLOBE_CLUSTER)
             return (-count, center.distance_to(mark.center()))
 
-        heart = min(prey, key=bunch)
+        heart = min(priority_prey(prey), key=bunch)
         group = [s for s in prey if s.center().distance_to(heart.center()) <= GLOBE_CLUSTER]
         spot = ZERO
         for s in group:
             spot += s.center()
         spot = spot * (1.0 / len(group))
-        self.world.darkness.throw(hand + self.rider_up * 3.0, spot)
+        self.world.darkness.throw(
+            hand + self.rider_up * 3.0, spot, getattr(self, "legendary", False)
+        )
         self.globe_cooldown = GLOBE_COOLDOWN
         self.cast = CAST_TIME
         self.aim = (spot - hand).normalized()
@@ -528,7 +539,10 @@ class Lizard(Displacer):
         if self.mounted:
             self.mounted = False
             leap = forward * DISMOUNT_LEAP.x + Vec2(0.0, DISMOUNT_LEAP.y)
-            self.world.add_drow(seat, facing=1 if forward.x >= 0.0 else -1, leap=leap)
+            drow = self.world.add_drow(seat, facing=1 if forward.x >= 0.0 else -1, leap=leap)
+            drow.cloaked = True
+            if getattr(self, "legendary", False):
+                drow.legendary = True
 
 
 class DrowPack(GoblinPack):
@@ -557,6 +571,9 @@ class Drow(Goblin):
         Actor.__init__(self, world, layout, anchor, upper=self.weapon)
         self.follower.facing = facing
         self.kind = "sword"
+        self.crowned = False
+        self.warband_horn_cooldown = 0.0
+        self.warband_boost = 0.0
         self.cooldown = world.random.uniform(0.2, 0.5)
         self.target: Stickman | None = None
         self.hunt = _hunt()
@@ -565,6 +582,8 @@ class Drow(Goblin):
         self.ragdoll = None
         self.kills = 0
         self.time = 0.0
+        self.cloaked = False
+        """True after a lizard dismount until the first scimitar swing lands in view."""
 
     @property
     def planner(self) -> Planner:
@@ -581,6 +600,7 @@ class Drow(Goblin):
     def update_dead(self, dt: float) -> None:
         super().update_dead(dt)
         self.time += dt
+        self.cloaked = False
 
     def _regroup_pace(self) -> float:
         return DROW_HASTE
@@ -608,6 +628,7 @@ class Drow(Goblin):
     def _try_attack(self, target: Stickman) -> None:
         if self._in_reach(target, slack=SWORD_START_REACH):
             self._face(target.center())
+            self.cloaked = False
             self.weapon.start()
             self.cooldown = SCIMITAR_COOLDOWN
 

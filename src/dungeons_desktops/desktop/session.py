@@ -12,8 +12,7 @@ creatures stand on its title/tab bar rather than hugging the menu bar.
 Every `spawn_interval` seconds a wandering stickman appears at a random screen
 edge: clinging to the left or right wall, or falling in from the top.
 
-One defender holds the screen at a time: the elemental (rises on the frontmost window as water,
-then turns to earth, air and fire as it's worn down), the chimera (prowls in on the frontmost
+One defender holds the screen at a time: the chimera (prowls in on the frontmost
 window), the drow lizard riders (two of them, on
 wall-climbing lizards from the frontmost window), the kobold drake riders (three of
 them, each a different chromatic colour, arriving on the frontmost window; once the last
@@ -45,13 +44,24 @@ from dungeons_desktops.game.defenders.drakes.drake import COLOURS
 from dungeons_desktops.game.defenders.drakes.kobold import KOBOLD_HP
 from dungeons_desktops.game.defenders.drow.actor import DROW_HP
 from dungeons_desktops.game.defenders.goblins.actor import PACK, Goblin
+from dungeons_desktops.game.defenders.graveknights.actor import (
+    GRAVEKNIGHT_PACK,
+    GRAVEKNIGHT_ROSTER,
+)
+from dungeons_desktops.game.defenders.zombies.actor import ZOMBIE_PACK
+from dungeons_desktops.game.progression import Progression
+from dungeons_desktops.game.unlocks import HERO_NAMES, UNLOCK_BY_KEY
 from dungeons_desktops.game.world.simulation import SimWorld
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.navigation.terrain import SurfaceKind
 
+LEGENDARY_DRAKE_PACK = len(COLOURS)
+LEGENDARY_ZOMBIE_PACK = ZOMBIE_PACK + 5
 SPAWN_INTERVAL = 6.0
 FIRST_SPAWN = 1.0
 MAX_STICKMEN = 8
+HERO_SPAWN_CHANCE = 0.01
+"""Chance for a claimed hero to replace a regular invader, with no hero already alive."""
 EDGES = ("left", "right", "top")
 GOBLIN_SPACING = 12.0
 GOBLIN_SQUAD = len(PACK)
@@ -71,11 +81,13 @@ DEFENDERS = (
     "displacer",
     "mindflayer",
     "worm",
+    "zombies",
+    "graveknights",
     "goblins",
     "dragon",
 )
-SUPPORTED_DEFENDERS = ("elementals", "ooze", *DEFENDERS)
-"""Every menu option; the normal rotation deliberately omits elementals and the ooze."""
+SUPPORTED_DEFENDERS = DEFENDERS
+"""Every menu option in the Command Board roster."""
 EDGE_TOUCH = 1.0
 SIDE_LANE = 18.0
 BOTTOM_LANE = stick_figure.MOVES.max_jump - 1.0
@@ -124,13 +136,17 @@ class DesktopSession(SimWorld):
         seed: int | None = None,
         spawn_interval: float = SPAWN_INTERVAL,
         max_stickmen: int = MAX_STICKMEN,
-        defenders: Sequence[str] = DEFENDERS,
+        defenders: Sequence[str] | None = None,
+        legendary_prefs: Sequence[str] | None = None,
         goblin_squad: int = GOBLIN_SQUAD,
+        progression: Progression | None = None,
+        enforce_unlocks: bool = False,
     ) -> None:
         """`screen` is the whole display; `usable` the part outside the menu bar and Dock.
         `defenders` is the rotation ("chimera", "drow", "drakes", "hydra",
         "mimic", "lich", "minotaur", "displacer", "mindflayer", "worm", "goblins",
-        "dragon"), starting with the first."""
+        "dragon"), starting with the first. The desktop app enables `enforce_unlocks`;
+        isolated simulations may use the full roster for combat testing."""
         self.screen = screen
         self.usable = usable
         self.source = source
@@ -141,10 +157,25 @@ class DesktopSession(SimWorld):
         self.max_stickmen = max_stickmen
         self.spawn_timer = min(FIRST_SPAWN, spawn_interval)
         super().__init__(
-            [], usable.bottom, usable.right, left=usable.left, ceiling=usable.top, seed=seed
+            [],
+            usable.bottom,
+            usable.right,
+            left=usable.left,
+            ceiling=usable.top,
+            seed=seed,
+            progression=progression,
         )
         self.poll()
-        self.defenders = tuple(defenders)
+        self.enforce_unlocks = enforce_unlocks
+        if defenders is None:
+            defenders = self.available_defenders if enforce_unlocks else DEFENDERS
+        self.defenders = tuple(kind for kind in defenders if kind in self.available_defenders)
+        # Which unlocked legendaries should actually summon; defaults to all claimed.
+        claimed = set(self.progression.unlocked_legendaries)
+        if legendary_prefs is None:
+            self.legendary_prefs = set(claimed)
+        else:
+            self.legendary_prefs = {kind for kind in legendary_prefs if kind in claimed}
         self.goblin_squad = goblin_squad
         self.defender_index = 0
         self.defender_max_hp = 0
@@ -159,6 +190,51 @@ class DesktopSession(SimWorld):
     # ----- defenders -----------------------------------------------------------
 
     @property
+    def available_defenders(self) -> tuple[str, ...]:
+        return self.progression.unlocked_defenders if self.enforce_unlocks else SUPPORTED_DEFENDERS
+
+    def can_spawn_hero(self, variant: str) -> bool:
+        return variant in HERO_NAMES and (
+            not self.enforce_unlocks or variant in self.progression.unlocked_heroes
+        )
+
+    def prefers_legendary(self, kind: str) -> bool:
+        """Whether the play menu has this monster set to its legendary form."""
+        return kind in self.legendary_prefs
+
+    def is_legendary(self, kind: str | None) -> bool:
+        """Whether this defender summons in its claimed legendary form."""
+        return (
+            kind is not None
+            and kind in self.progression.unlocked_legendaries
+            and kind in self.legendary_prefs
+        )
+
+    def set_legendary_pref(self, kind: str, prefer: bool) -> None:
+        """Prefer (or clear) the legendary form; re-summons if that defender is live."""
+        if prefer:
+            if kind in self.progression.unlocked_legendaries or not self.enforce_unlocks:
+                self.legendary_prefs.add(kind)
+        else:
+            self.legendary_prefs.discard(kind)
+        if self.defender == kind and kind in self.defenders:
+            self._dismiss()
+            self._summon(kind)
+
+    def claim_unlock(self, key: str) -> bool:
+        if not self.progression.claim_unlock(key):
+            return False
+        unlock = UNLOCK_BY_KEY[key]
+        if unlock.kind == "monster" and unlock.target not in self.defenders:
+            self.set_defenders((*self.defenders, unlock.target))
+        if unlock.kind == "legendary":
+            self.legendary_prefs.add(unlock.target)
+            if self.defender == unlock.target:
+                self._dismiss()
+                self._summon(unlock.target)
+        return True
+
+    @property
     def defender(self) -> str | None:
         return self.defenders[self.defender_index] if self.defenders else None
 
@@ -166,15 +242,16 @@ class DesktopSession(SimWorld):
     def live_monsters(self) -> list[Mortal]:
         """The defender itself: a mind flayer's devourers and thralls don't count."""
         return [
+            *self.zombies,
+            *self.graveknights,
             *self.goblins,
             *self.worms,
             *self.dragons,
             *self.mindflayers,
             *self.displacers,
             *self.minotaurs,
-            *self.oozes,
+            *self.aboleths,
             *self.chimeras,
-            *self.elementals,
             *self.liches,
             *self.mimics,
             *self.hydras,
@@ -233,6 +310,9 @@ class DesktopSession(SimWorld):
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(f"Unknown defender type: {names}")
+        locked = set(selected) - set(self.available_defenders)
+        if locked:
+            raise ValueError(f"Defender not unlocked: {', '.join(sorted(locked))}")
         if selected == self.defenders:
             return
 
@@ -263,25 +343,25 @@ class DesktopSession(SimWorld):
     def _dismiss(self) -> None:
         """Poof the live monsters and free any thralls; the dead ones in `fallen` are
         left to fade."""
-        for ooze in self.oozes:
-            ooze.release_captives()
         for worm in self.worms:
             self.debris.burst(worm.head, Vec2(0.0, -1.0), 16, 220.0, spread=1.4, puffs=6)
         for goblin_ in self.goblins:
             self._poof(goblin_.center())
+        for knight in self.graveknights:
+            self._poof(knight.center())
         for dragon in self.dragons:
             self.debris.burst(dragon.body, Vec2(0.0, -1.0), 10, 160.0, spread=3.0, puffs=14)
         for hydra in self.hydras:
             if not hydra.underground:
                 self._poof(hydra.center())
         for monster in [
+            *self.zombies,
             *self.mindflayers,
             *self.devourers,
             *self.displacers,
             *self.minotaurs,
-            *self.oozes,
+            *self.aboleths,
             *self.chimeras,
-            *self.elementals,
             *self.liches,
             *self.mimics,
             *self.drakes,
@@ -295,15 +375,16 @@ class DesktopSession(SimWorld):
         for thrall in self.thralls:
             thrall.release()
         self.worms.clear()
+        self.zombies.clear()
+        self.graveknights.clear()
         self.goblins.clear()
         self.dragons.clear()
         self.mindflayers.clear()
         self.devourers.clear()
         self.displacers.clear()
         self.minotaurs.clear()
-        self.oozes.clear()
+        self.aboleths.clear()
         self.chimeras.clear()
-        self.elementals.clear()
         self.liches.clear()
         self.mimics.clear()
         self.hydras.clear()
@@ -315,49 +396,55 @@ class DesktopSession(SimWorld):
         self.darkness.clear()
 
     def _summon(self, kind: str | None) -> None:
-        if kind == "elementals":
-            elemental = self.add_elemental(self._goblin_muster(1)[0])
-            self._poof(elemental.center())
-        elif kind == "ooze":
-            ooze = self.add_ooze(self._goblin_muster(1)[0])
-            self._poof(ooze.center())
-        elif kind == "chimera":
-            chimera = self.add_chimera(self._goblin_muster(1)[0])
+        legendary = self.is_legendary(kind)
+        if kind == "chimera":
+            chimera = self.add_chimera(self._goblin_muster(1)[0], legendary=legendary)
             self._poof(chimera.center())
         elif kind == "drow":
             muster = self._goblin_muster(GOBLIN_SQUAD)
             for i, point in enumerate((muster[0], muster[-1])[:LIZARDS]):
-                lizard = self.add_lizard(point, heading=-1 if i == 0 else 1)
+                lizard = self.add_lizard(point, heading=-1 if i == 0 else 1, legendary=legendary)
                 self._poof(lizard.center())
         elif kind == "drakes":
-            colours = self.random.sample(COLOURS, DRAKE_PACK)
-            for point, colour in zip(self._goblin_muster(DRAKE_PACK), colours, strict=True):
-                drake = self.add_drake(point, colour)
+            pack = LEGENDARY_DRAKE_PACK if legendary else DRAKE_PACK
+            colours = list(COLOURS) if legendary else self.random.sample(COLOURS, DRAKE_PACK)
+            for point, colour in zip(self._goblin_muster(pack), colours, strict=True):
+                drake = self.add_drake(point, colour, legendary=legendary)
                 self._poof(drake.center())
         elif kind == "hydra":
-            self.add_hydra(self._goblin_muster(1)[0])
+            self.add_hydra(self._goblin_muster(1)[0], legendary=legendary)
         elif kind == "worm":
-            self.add_worm()
+            self.add_worm(legendary=legendary)
         elif kind == "dragon":
-            self.add_dragon()
+            self.add_dragon(legendary=legendary)
         elif kind == "mimic":
-            mimic = self.add_mimic(self._goblin_muster(1)[0])
+            mimic = self.add_mimic(self._goblin_muster(1)[0], legendary=legendary)
             self._poof(mimic.center())
         elif kind == "lich":
-            lich = self.add_lich(self._goblin_muster(1)[0])
+            lich = self.add_lich(self._goblin_muster(1)[0], legendary=legendary)
             self._poof(lich.center())
         elif kind == "minotaur":
-            bull = self.add_minotaur(self._goblin_muster(1)[0])
+            bull = self.add_minotaur(self._goblin_muster(1)[0], legendary=legendary)
             self._poof(bull.center())
         elif kind == "displacer":
-            beast = self.add_displacer(self._goblin_muster(1)[0])
+            beast = self.add_displacer(self._goblin_muster(1)[0], legendary=legendary)
             self._poof(beast.center())
         elif kind == "mindflayer":
-            flayer = self.add_mindflayer(self._goblin_muster(1)[0])
+            flayer = self.add_mindflayer(self._goblin_muster(1)[0], legendary=legendary)
             self._poof(flayer.center())
+        elif kind == "zombies":
+            pack = LEGENDARY_ZOMBIE_PACK if legendary else ZOMBIE_PACK
+            for point in self._goblin_muster(pack):
+                zombie = self.add_zombie(point, legendary=legendary)
+                self._poof(zombie.center())
+        elif kind == "graveknights":
+            points = self._goblin_muster(GRAVEKNIGHT_PACK)
+            for point, role in zip(points, GRAVEKNIGHT_ROSTER, strict=True):
+                knight = self.add_graveknight(point, role, legendary=legendary)
+                self._poof(knight.center())
         elif kind == "goblins":
-            for point in self._goblin_muster(self.goblin_squad):
-                goblin_ = self.add_goblin(point)
+            for i, point in enumerate(self._goblin_muster(self.goblin_squad)):
+                goblin_ = self.add_goblin(point, legendary=legendary, crowned=legendary and i == 0)
                 self._poof(goblin_.center())
         self.defender_max_hp = sum(m.max_hp for m in self.live_monsters)
         self.defender_max_hp += self._riders()
@@ -430,12 +517,18 @@ class DesktopSession(SimWorld):
             if len(self.stickmen) < self.max_stickmen:
                 self.spawn_at_edge()
 
-    def spawn_at_edge(
-        self, edge: str | None = None, variant: str | None = None
-    ) -> Stickman:
+    def spawn_at_edge(self, edge: str | None = None, variant: str | None = None) -> Stickman:
         random = self.random
         edge = edge or random.choice(EDGES)
-        variant = variant or random.choice(list(stick_figure.CLASSES))
+        if variant in HERO_NAMES and not self.can_spawn_hero(variant):
+            raise ValueError(f"Hero not unlocked: {variant}")
+        if variant is None:
+            heroes = self.progression.unlocked_heroes if self.enforce_unlocks else ()
+            hero_alive = any(hero.animated for hero in self.heroes)
+            if heroes and not hero_alive and random.random() < HERO_SPAWN_CHANCE:
+                variant = random.choice(heroes)
+            else:
+                variant = random.choice(list(stick_figure.CLASSES))
         if edge != "top":
             anchor = self._side_anchor(edge)
             if anchor is not None:

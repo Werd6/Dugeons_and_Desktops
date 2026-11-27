@@ -242,19 +242,19 @@ def still(stickman):
     return stickman
 
 
-def test_with_the_flag_up_the_whole_band_hunts_whoever_is_nearest_the_flag():
+def test_each_goblin_hunts_its_nearest_even_with_the_flag_up():
     world = world_with()
     sword = world.add_goblin(Vec2(150, 700), "sword")
     flag = world.add_goblin(Vec2(900, 700), "flag")
     near_sword = still(world.add_stickman(Vec2(250, 700)))
     near_flag = still(world.add_stickman(Vec2(1050, 700)))
     run(world, 0.5)
-    assert world.goblin_pack.target is near_flag
-    assert sword.target is near_flag and flag.target is near_flag
+    assert world.goblin_pack.target is None
+    assert sword.target is near_sword and flag.target is near_flag
     assert near_sword is not near_flag
 
 
-def test_with_the_flag_down_each_goblin_hunts_its_nearest():
+def test_each_goblin_hunts_its_nearest_with_the_flag_down():
     world = world_with()
     left = world.add_goblin(Vec2(150, 700), "sword")
     right = world.add_goblin(Vec2(1000, 700), "spear")
@@ -285,43 +285,43 @@ def put(world: SimWorld, stickman, x: float) -> None:
     stickman.follower.reset(world.planner.anchor_near(Vec2(x, 700)))
 
 
-def test_the_band_turns_as_soon_as_the_flag_is_clearly_nearer_someone_else():
+def test_a_goblin_switches_when_another_quarry_is_clearly_nearer():
     world = world_with()
-    swords = [world.add_goblin(Vec2(80 + 12 * i, 700), "sword") for i in range(3)]
-    flag = world.add_goblin(Vec2(500, 700), "flag")
-    flag.update = lambda dt: None
+    sword = world.add_goblin(Vec2(500, 700), "sword")
+    sword._head_out = lambda dt: None
+    sword.halt()
     first = still(world.add_stickman(Vec2(560, 700)))
     second = still(world.add_stickman(Vec2(430, 700)))
-    pack = world.goblin_pack
     run(world, 0.5)
-    assert pack.target is first
+    assert sword.target is first
+    assert sword.contact().x == 500.0
 
     put(world, first, 575)
     run(world, 2.0)
-    assert pack.target is first, "a near tie mustn't flip the band over"
+    assert sword.target is first, "a near tie mustn't flip the quarry over"
 
     put(world, first, 650)
     run(world, 0.5)
-    assert pack.target is second
-    assert all(g.target is second for g in swords)
+    assert sword.target is second
 
 
-def test_the_band_follows_the_flag_when_it_is_carried_off():
+def test_goblins_keep_their_own_quarries_when_the_flag_is_carried_off():
     world = world_with()
-    swords = [world.add_goblin(Vec2(150 + 12 * i, 700), "sword") for i in range(4)]
+    near = world.add_goblin(Vec2(150, 700), "sword")
+    far = world.add_goblin(Vec2(900, 700), "sword")
     flag = world.add_goblin(Vec2(200, 700), "flag")
     near_band = still(world.add_stickman(Vec2(300, 700)))
     far_off = still(world.add_stickman(Vec2(1000, 700)))
     run(world, 0.5)
-    assert world.goblin_pack.target is near_band
+    assert near.target is near_band and far.target is far_off
 
     flag.pick_up(flag.center())
     flag.hold_at(Vec2(990, 650))
     run(world, 0.5)
-    assert all(g.target is far_off for g in swords)
+    assert near.target is near_band and far.target is far_off
     flag.place(Vec2(990, 650))
     run(world, 1.0)
-    assert all(g.target is far_off for g in world.goblins)
+    assert near.target is near_band and far.target is far_off
 
 
 def test_the_band_spreads_around_its_quarry_and_the_swords_still_land_blows(monkeypatch):

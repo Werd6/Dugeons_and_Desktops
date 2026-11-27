@@ -2,9 +2,25 @@
 
 A procedural desktop dungeon-defense game in Python and PySide6. The full product spec is in [docs/PRD.md](docs/PRD.md).
 
-The current slice is the **creature rig and navigation**: a small 2D toolkit for bones, inverse kinematics, procedural walking and climbing, ragdoll physics, and pathfinding over window-like boxes, demonstrated on stick figures and goblins. It runs in a preview window or as a **desktop pet** on your real windows.
+It runs as a **desktop pet** on your real windows (macOS and Windows), with a local creature-rig preview for development.
 
-## Setup (macOS)
+## Download test builds
+
+Prebuilt apps are published to GitHub Releases:
+
+- **Latest test builds:** https://github.com/Werd6/Dugeons_and_Desktops/releases/tag/dev
+- **All releases:** https://github.com/Werd6/Dugeons_and_Desktops/releases
+
+Grab `Dungeons-and-Desktops-macOS.zip` or `Dungeons-and-Desktops-Windows.zip`, unpack, and run.
+
+These builds are **unsigned** for now:
+
+- **macOS:** right-click the app → Open, or run `xattr -cr "Dungeons and Desktops.app"` after unzipping.
+- **Windows:** if SmartScreen warns, choose More info → Run anyway.
+
+CI rebuilds the `dev` prerelease on every push to `main` and on manual **Build apps** workflow runs. Version tags `v*` publish immutable releases.
+
+## Setup (macOS / Windows)
 
 Requires Python 3.12+.
 
@@ -13,17 +29,75 @@ python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 ```
 
-This also installs `pyobjc-framework-Quartz`, which desktop mode uses to read window positions.
+On macOS this also installs `pyobjc-framework-Quartz`, which desktop mode uses to read window positions. Windows uses Win32 window enumeration via ctypes (no extra dependency).
 
 ## Run the desktop pet
+
+New games start with **Goblins, Mimic, and Dragon**. Open **Unlocks…** from the
+tray or settings window to claim more monsters and heroes. The Worm requires
+**100 total enemy kills**. Each class-linked monster requires **50 kills of its
+ordinary enemy class**, and its hero requires **100 kills credited to that monster**
+plus claiming the monster first:
+
+| Enemy class | Monster | Hero |
+| --- | --- | --- |
+| Barbarian | Minotaur | The Mighty |
+| Wizard | Lich | The Inquisitive |
+| Rogue | Kobolds | The Slayer |
+| Paladin | Zombies | The Indomitable |
+| Ranger | Drow | The Outlaw |
+| Cleric | Graveknights | The Burning Dawn |
+| Alchemist | Displacer beast | The Biologist |
+| Druid | Chimera | Natures Wrath |
+| Sorcerer | Mind flayer | The Darkblood |
+| Fighter | Hydra | The Soulforger |
+
+Reaching a target makes its **Unlock** button available; click it to claim the
+reward permanently. Claiming preserves your kill totals and skulls. Claimed
+monsters join the enabled rotation and can be toggled in **Defenders**. Claimed
+heroes become available in **Heroes**, and can appear naturally with a 1% chance
+per spawn while no other hero is alive. Kobold/drake kills share the Slayer's
+requirement, and drow/lizard kills share the Outlaw's. Skeleton and mind flayer
+summon credit also counts toward the corresponding heroes.
+
+Existing saves retain their lifetime kills and skulls; eligible rewards are
+ready to claim on the Unlocks page. An old enabled-monster selection cannot
+bypass an unlock. The rig preview keeps its full roster for testing.
+
+Desktop mode saves **lifetime progression** after every enemy defeated: one skull,
+the enemy's class (named heroes have separate entries), and a kill for the monster
+type that landed the finishing hit. The skull counter retains its total across
+launches. Open **Lifetime progress…** in the tray or settings menu for both
+breakdowns. Summon kills credit their summoner: skeletons count for the lich,
+and thralls and intellect devourers count for the mind flayer, even after the
+summoner dies. A thrall's own death also earns one skull and credits the mind
+flayer, counted under the thrall's original adventurer class. Existing saved
+summon kill totals merge into their summoner's totals automatically. Losing
+other defenders earns no skulls. Progress is stored locally
+alongside the app's preferences using Qt's `QSettings` (`progression/stats`).
+The rig preview and `--mock-desktop` keep separate, temporary totals. Tracking
+starts with this update; older launches did not save their kill counts.
+
+Resizing a supporting window or switching it to fullscreen preserves living
+characters and their HP. If a surface disappears, adventurers fall briefly, get
+back up on the current terrain, and continue; the fall does not count as a death.
 
 ```bash
 .venv/bin/python -m dungeons_desktops --desktop
 ```
 
+### Build a local app package
+
+```bash
+.venv/bin/pip install -e '.[packaging]'
+.venv/bin/pyinstaller packaging/dungeons_desktops.spec
+```
+
+Outputs land in `dist/` (`Dungeons and Desktops.app` on macOS, an onedir folder on Windows).
+
 A transparent overlay covers the main screen and the creatures run around on your actual app windows: window tops are walkable, window sides and the screen's left and right edges are climbable, window undersides and the top of the screen can be hung from, and the bottom of the screen (above the Dock) is the floor. Every 6 seconds a wandering stickman adventurer of a random class appears at a random screen edge (clinging to the left or right edge, or falling in from the top), up to 8 at a time. Move a window and anyone standing on it rides along; close or minimize it and they fall.
 
-A **mimic** is the first defender: it sits on the frontmost window (or the floor) **disguised as a treasure chest**, drawn front-on: a wooden chest with iron bands, a barrel-topped lid and a brass lock plate in the middle, a gold glint now and then. The tells: it breathes very faintly, and every 3.5 to 7 s its lid twitches. While disguised it is **not a monster** to anyone: it can't be targeted, hit or blasted, wanderers don't go after it, and it doesn't count for seeking. Every 0.4 s it baits its **marks**: the **3 nearest** adventurers on their feet who can walk up beside it (fewer if there aren't 3; anyone with no route there is skipped for 4 s, and a mark who dies or gets away is just dropped); with all 3 baited, a newcomer at least 30% nearer than the farthest mark takes his place until that mark is within 60 px. The first mark to get there springs the trap; the others are let go ("!" and haste gone) the moment it's out of its disguise, or as soon as they arrive while it's still busy with him (they never open it too), so they're right there to fight it. Each mark gets a bouncing yellow **"!"** over his head, drops whatever he was doing (no seeking, wandering or attacking) and hurries over (1.5x his speed, only while he has the "!") by his usual routes. Hurt on the way, he snaps out of it. Beside the chest he **stows his weapon** on his back (0.45 s), bends and **reaches for the lid** (0.35 s) and lifts it a crack, gold light spilling out (0.5 s)... and the trap springs: the lid flies open on a toothy maw, its **tongue** shoots out and wraps round him, yanks him off his feet (flailing) and reels him up over its mouth, and he's **swallowed whole**: he shrinks down into the chest and is gone (body and all, always deadly), the lid snaps shut and the chest bulges with a "GULP!". If the mimic dies or leaves mid-swallow, the tongue lets go and he drops. A **rogue** can't be fooled: baited like anyone else, he runs over, but on reaching it he sees through it, starts back and hops away from it (0.4 s), winds up and **throws a dagger** at it. The dagger always lands, forcing it out of its disguise into monster form (its camouflage cooldown starting as on any reveal) and hitting it for 1; he's off the bait as soon as he spots it and goes back to fighting as usual. Disguised again, it may bait him again, and he'll expose it again. Then the mimic is **revealed**: it flips side-on (the front view squashes narrow and the side profile widens out, 0.6 s), the lid now a jaw hinged at the back, gaping forward, and a beady eye on the lid. Like everything else it's drawn **flat**: front-on as a chest, in pure side profile as a monster. On floors and window tops it has **no legs: it hops**, like a Terraria mimic: a squash of anticipation, a stretched launch, its lid flapping (teeth flashing) in the air, then a squashed landing with a puff of dust and a short settle. Each hop is 40 to 60 px long and 16 to 26 px high (about every half second while chasing, more lazily otherwise), with bigger hops across gaps between windows and down drops, and a quick flat flip (squash narrow, widen facing the other way) to turn round between hops. Only to **climb walls and undersides does it grow legs**: eight jointed spider legs, each a two-bone IK chain from a hip on the box to a foot planted on the wall. A planted foot stays put while the body moves on; once it's fallen 6 px behind where it wants to be (out to its side, a little ahead the way it's going), it lifts and swings along a short arc to there (0.09 s) and plants again. The legs step in two alternating groups of four (one group's feet stay down while the other's are up), never more than four up at once, and the knees always bend out away from the body. Hopping at a wall, the legs burst out of it mid-air, its front feet reach out and plant on the wall, and its body swings 90 degrees up round them, the back feet stepping on after. At the top of a wall its front feet step over the corner onto the ceiling or a window's underside as the body swings round; crawling back onto a top it folds its legs away, and dropping off, they fold mid-air and it lands with a squash. It scuttles at 88 px/s up walls and 80 along undersides, on its own terrain (left out wherever a window is too close to fit it). Now it's a monster like any other. It chases the nearest adventurer (sticking with him 1.5 s unless another is much nearer), stopping 14 px short of him on his surface. Within 150 px it **leap-chomps** him: it crouches (0.2 s), leaps at him jaws wide and chomps him on contact for **4 damage**, lands just short of him (never on top of him) and recovers, then waits 1.4 s before the next one. Under 50 px it's a quick **hop-chomp** for the same 4. It only leaps when where it lands puts him within its jaws, along an arc clear of every window, so it never chomps air. Hanging under an underside it can't jump from, it snaps at whoever comes in front of its jaws (also 4). It never attacks thralls. **12 s after the reveal** its camouflage is ready again: on a floor or window top an adventurer can walk up to, it stops where it is; on a wall or underside (or a ledge too short to stand beside it) it first scuttles to the nearest such spot (after 8 s without one, any floor will do). It closes its jaw and turns front-on (0.6 s) and is just a chest again: adventurers fighting it lose interest, and 1.5 s later the next mark gets his "!". It has **10 HP**, and only takes damage while revealed. It survives windows moving (it rides them, in either form) and closing under it (it falls and lands upright). At 0 HP its legs crumple, its lid falls open and a few gold coins spill out before it fades.
+A **mimic** is the first defender: it sits on the frontmost window (or the floor) **disguised as a treasure chest**, drawn front-on: a wooden chest with iron bands, a barrel-topped lid and a brass lock plate in the middle, a gold glint now and then. The tells: it breathes very faintly, and every 3.5 to 7 s its lid twitches. While disguised it is **not a monster** to anyone: it can't be targeted, hit or blasted, wanderers don't go after it, and it doesn't count for seeking. Every 0.4 s it baits its **marks**: the **3 nearest ordinary adventurers** on their feet who can walk up beside it. **Named heroes ignore the bait completely.** Fewer are marked if there aren't 3; anyone with no route there is skipped for 4 s, and a mark who dies or gets away is just dropped. With all 3 baited, a newcomer at least 30% nearer than the farthest mark takes his place until that mark is within 60 px. The first mark to get there springs the trap; the others are let go ("!" and haste gone) the moment it's out of its disguise, or as soon as they arrive while it's still busy with him (they never open it too), so they're right there to fight it. Each mark gets a bouncing yellow **"!"** over his head, drops whatever he was doing (no seeking, wandering or attacking) and hurries over (1.5x his speed, only while he has the "!") by his usual routes. Hurt on the way, he snaps out of it. Beside the chest he **stows his weapon** on his back (0.45 s), bends and **reaches for the lid** (0.35 s) and lifts it a crack, gold light spilling out (0.5 s)... and the trap springs: the lid flies open on a toothy maw, its **tongue** shoots out and wraps round him, yanks him off his feet (flailing) and reels him up over its mouth, and he's **swallowed whole**: he shrinks down into the chest and is gone (body and all, always deadly), the lid snaps shut and the chest bulges with a "GULP!". If the mimic dies or leaves mid-swallow, the tongue lets go and he drops. A regular **rogue** can't be fooled: baited like anyone else, he runs over, but on reaching it he sees through it, starts back and hops away from it (0.4 s), winds up and **throws a dagger** at it. The dagger always lands, forcing it out of its disguise into monster form (its camouflage cooldown starting as on any reveal) and hitting it for 1; he's off the bait as soon as he spots it and goes back to fighting as usual. Disguised again, it may bait him again, and he'll expose it again. Then the mimic is **revealed**: it flips side-on (the front view squashes narrow and the side profile widens out, 0.6 s), the lid now a jaw hinged at the back, gaping forward, and a beady eye on the lid. Like everything else it's drawn **flat**: front-on as a chest, in pure side profile as a monster. On floors and window tops it has **no legs: it hops**, like a Terraria mimic: a squash of anticipation, a stretched launch, its lid flapping (teeth flashing) in the air, then a squashed landing with a puff of dust and a short settle. Each hop is 40 to 60 px long and 16 to 26 px high (about every half second while chasing, more lazily otherwise), with bigger hops across gaps between windows and down drops, and a quick flat flip (squash narrow, widen facing the other way) to turn round between hops. Only to **climb walls and undersides does it grow legs**: eight jointed spider legs, each a two-bone IK chain from a hip on the box to a foot planted on the wall. A planted foot stays put while the body moves on; once it's fallen 6 px behind where it wants to be (out to its side, a little ahead the way it's going), it lifts and swings along a short arc to there (0.09 s) and plants again. The legs step in two alternating groups of four (one group's feet stay down while the other's are up), never more than four up at once, and the knees always bend out away from the body. Hopping at a wall, the legs burst out of it mid-air, its front feet reach out and plant on the wall, and its body swings 90 degrees up round them, the back feet stepping on after. At the top of a wall its front feet step over the corner onto the ceiling or a window's underside as the body swings round; crawling back onto a top it folds its legs away, and dropping off, they fold mid-air and it lands with a squash. It scuttles at 88 px/s up walls and 80 along undersides, on its own terrain (left out wherever a window is too close to fit it). Now it's a monster like any other. It chases the nearest adventurer (sticking with him 1.5 s unless another is much nearer), stopping 14 px short of him on his surface. Within 150 px it **leap-chomps** him: it crouches (0.2 s), leaps at him jaws wide and chomps him on contact for **4 damage**, lands just short of him (never on top of him) and recovers, then waits 1.4 s before the next one. Under 50 px it's a quick **hop-chomp** for the same 4. It only leaps when where it lands puts him within its jaws, along an arc clear of every window, so it never chomps air. Hanging under an underside it can't jump from, it snaps at whoever comes in front of its jaws (also 4). It never attacks thralls. **12 s after the reveal** its camouflage is ready again: on a floor or window top an adventurer can walk up to, it stops where it is; on a wall or underside (or a ledge too short to stand beside it) it first scuttles to the nearest such spot (after 8 s without one, any floor will do). It closes its jaw and turns front-on (0.6 s) and is just a chest again: adventurers fighting it lose interest, and 1.5 s later the next mark gets his "!". It has **10 HP**, and only takes damage while revealed. It survives windows moving (it rides them, in either form) and closing under it (it falls and lands upright). At 0 HP its legs crumple, its lid falls open and a few gold coins spill out before it fades.
 
 A **lich** is the next defender: a tall, gaunt skeleton king (about 1.45x an adventurer's height) in a ragged **black robe** (a faint grey rim keeps it visible on a dark desktop) with a high pointed collar, a bone-white skull with glowing green pinpoint eyes, and a **gold crown** set with green gems. He walks slowly (30 px/s, eased in and out, a slight forward lean, the hem trailing and swaying) with his **right hand held out before him, palm up, a green flame flickering over it**; he turns round smoothly through a three-quarter view toward you, so the flame hand swings round with him. He walks the floor and window tops but never climbs or jumps: to get to another surface he **levitates** (up to 50 px/s), rising or sinking in a clear column beside the windows, gliding on or off at the surface's level and slowing at every corner, green motes drifting under his hem. He hunts the nearest free adventurer (sticking with him at least 1.5 s) but **keeps his distance**: he looks for a spot 180 to 260 px from him (ideally 220) and at least 150 px from every other adventurer, on his own surface if one will do, else on another window he floats to; anyone coming close, he backs away from (at 20 px/s, still facing his foe), and rather than walk past an adventurer he floats over his head. When his foe is **far** (over 400 px away, or more than about 4 s of walking and levitating from a casting spot), or when a group of at least 3 free adventurers (each within 300 px of the one in the middle) has gathered elsewhere that's at least 2 bigger than his foe's group (`CLUSTER_DOOR`, `CLUSTER_GROWTH` in `game/defenders/lich/actor.py`), he casts **dimension door** instead: he raises the flame hand and traces a glowing green and violet door in the air, which swings open while a matching door shimmers into view about 220 px from the adventurer nearest the middle of the **biggest group** of free adventurers (ties go to the group nearer him), who becomes his foe: on that adventurer's surface or a nearby floor or window top, never inside a window, and at least 100 px from every adventurer (`DOOR_CROWD`), so he lands right by the group. He dissolves into motes that stream into the door, steps out of the other one facing his foe, and both doors close and fade (about 1.35 s in all). In transit he can't be targeted or hurt. If the far spot is lost mid-door (its window closes or moves), he picks another or comes back out where he started. Dimension door has a **20 s cooldown** (`DOOR_COOLDOWN` in `game/defenders/lich/actor.py`) and is first ready 4 s after he appears; it isn't one of his queued spells and doesn't advance the queue. Whenever a foe is within **420 px** (`CAST_RANGE`; windows don't block spells) and he's facing him, he **casts** (0.9 s, the spell leaving his hand 0.45 s in) without stopping: he keeps walking, backing off or levitating toward his spot, the gesture laid over his arms and jaw while his hem and glide carry on (never during a dimension door). The flame flares at the release, with a gesture for each spell: a wind-back and an overhand lob from the flame palm for fireball, a bony finger pointed at the foe with his jaw working as he speaks the word for power word kill, a pull-back and palm thrust for magic missiles, both hands thrust forward with lightning crackling between the fingers for chain lightning, and both arms raised then slammed down, palms to the ground, for black tentacles (`GESTURES` in `game/defenders/lich/actor.py`). Spells: **every cast is the next spell in his queue** (`Lich.spells`, `next_spell()`), whoever the foe, wrapping back to the start, from the flame in his palm (`game/defenders/lich/spells.py`). No spell has a cooldown of its own: after each he waits that spell's delay (`SPELL_DELAY` in `game/defenders/lich/actor.py`) before starting the next: 0.9 s after magic missiles, 1.2 s after chain lightning, 1.4 s after fireball, 1.6 s after black tentacles and 2.2 s after power word kill. The queue runs:
 
@@ -54,6 +128,10 @@ Each dragon comes in one of five **colours**, picked at random when it spawns (`
 - **Blue**: sapphire scales with a pale blue belly and a single unicorn horn from its forehead; breathes a spray of forked **lightning** bolts. A victim goes rigid and jerks with his skeleton flashing through and sparks flying, then drops charred and smoking ("Struck down by the blue dragon's lightning!").
 - **Black**: charcoal scales with a violet sheen, a bone-coloured belly and curled ram's horns; spits a spray of **acid** that drips and sizzles where it lands. A victim slumps and melts into a bubbling acid puddle ("Dissolved by the black dragon's acid!").
 - **White**: white and ice-blue, with the red dragon's horns; breathes a **cone of cold** glittering with ice crystals. A victim freezes solid where he stands inside a block of ice, then shatters into shards ("Frozen solid by the white dragon!").
+
+**Zombies** are green, adventurer-sized stick figures with hunched shoulders, drooping heads, and both arms stretched forward. Six arrive as a defender pack. They shamble with short, low steps and an uneven pace, moving at no more than half an ordinary adventurer’s walking speed (25 versus 50 points/s). The initial zombies have 6 HP and claw nearby adventurers for 1 damage with a 1.5-second cooldown. They can also claw while climbing walls or hanging from ceilings, briefly pausing their route and keeping one hand attached while the other attacks. Every adventurer killed by a zombie spawns one new zombie at the victim’s position, inheriting the killer’s current HP exactly. Offspring can also reproduce, passing on their remaining HP after any further damage; a kill never heals the parent. There is no pack-size cap. Zombies reserve personal space and gently separate along their current surface: 14 points on floors and ceilings, and 28 when climbing walls. Crowded ledges use the room available without pushing zombies off the edge. Select **Zombies** in the desktop defender settings, or use **Add zombie** in the preview context menu. Their implementation lives in `game/defenders/zombies/`.
+
+The **Graveknights** arrive as a fixed four-role undead squad: an archer with the ranger's bow, a green-eyed helmeted fighter with sword and heater shield, a mage casting the Hero Sorcerer's harming bolt, and a barbarian with a war axe. Nobody swaps weapons. The archer and mage fire while advancing, stop about 100 points from their quarry, and retreat to reopen that firing distance when rushed; the fighter and barbarian charge into melee. They share one quarry and, like zombies, gently destack along their supporting surface without stepping off short ledges. When a regular adventurer lands the killing blow, the slain spirit possesses that killer and turns them into the closest matching Graveknight role; each lineage can jump bodies twice before its next death becomes final. Heroes, thralls, and environmental kills cannot be possessed. Every role has independent HP, damage, cooldown, range, standoff, knockback, and movement-speed tuning (archer 10 HP, fighter 14, mage 9, barbarian 15). Select **Graveknights** in the desktop defender settings, use **Add Graveknights** in the preview, or press `Q` there.
 
 A **goblin war band** of 11 (a standard bearer, six swords and four spears; `PACK` in `game/defenders/goblins/actor.py`) arrives together on the frontmost window and hunts as a pack: while the standard bearer lives they all go after the stickman nearest the flag, and goblins heading back toward the flag move 50% faster so the band closes ranks; once the flag falls, each goblin goes after whoever is nearest itself. They get around exactly like the stickmen do, running, jumping, climbing window sides and mantling ledges, only faster. The **sword goblin** runs him down and chops at him (even while clinging to a wall), the **spear goblin** hangs back on solid footing (never on a wall, where it can't throw) and lobs spears (through any window in the way) that stick quivering where they land, and the **flag bearer** charges along with the war banner and never attacks. Each goblin hit does 1 damage, so a 4 HP adventurer goes down on the 4th hit, counted across all the goblins. With nobody to hunt, the pack roams to a random spot together.
 
@@ -99,6 +177,133 @@ Current limitations:
 - Full-screen apps live in their own Space and aren't supported.
 - The overlay sits above the menu bar so characters on a maximized window's top stay visible.
 
+**Natures Wrath**, the hero druid, can be added with **Spawn Natures Wrath** in the
+desktop settings or tray menu, or **Add Natures Wrath** in the preview. He uses a
+slightly taller goblin body, red mohawk, empty hands, and regular druid movement
+speeds. His foundation includes health, targeting, navigation, and ragdolls;
+his ability rotation runs **Fireball → Giant Bear → Chain Lightning → Magma Dragon**.
+The magma dragon strafes for 6 seconds, uses normal dragon AI for 10, then strafes
+for 6 more. The red-mohawk bear wanders and charges on walkable surfaces for
+30 seconds without climbing. See
+[the hero setup](docs/natures-wrath/README.md).
+
+**The Mighty**, the barbarian hero, uses the standard barbarian at **1.5× size**
+with thicker orange lines and a larger, broader war axe. Add him with
+**Spawn The Mighty** in desktop settings or the tray menu, or **Add The Mighty**
+in the preview. He chooses melee, Leap Smash, or Boulder Throw by distance;
+every third melee attack becomes a massive ground smash. Damage triggers
+10 seconds of rage, refreshed by further damage: twice his hero size, red eyes
+and steam, and +2 damage. See [the hero setup](docs/the-mighty/README.md).
+
+**Iggy the Inquisitive**, the gnome wizard hero, has a **half-height pink wizard body**
+with slightly thicker lines, a **full-size blue wizard hat**, and a blue cleric-style robe. Use
+**Spawn Iggy** in desktop settings or the tray menu, or **Add Iggy** in the preview.
+A small cat follows him. His spells have independent cooldowns: **Simulacrum**
+(10 seconds, up to four blue 3-HP copies), **Dimension Door** (20 seconds),
+**Chromatic Ray** (6 seconds, a sweeping beam that hits multiple enemies),
+and a sequential five-shot **Magic Missile** volley
+(4 seconds). Copies use the other three spells but cannot summon copies themselves.
+Simulacrum casts whenever ready, even outside combat. Chromatic Ray can disintegrate,
+melt, polymorph, freeze, or petrify enemies; slain statues shatter. Iggy and his
+copies resist the Mind Flayer's stun.
+See [the hero setup](docs/the-inquisitive/README.md).
+
+**The Slayer**, the rogue hero, wears a red mouth bandana and a dark trailing cape,
+with thick dark gray body lines and serrated daggers held in reverse grip. His
+arms swing with his running gait, and he attacks with alternating downward slashes.
+After three seconds without attacking, he becomes a translucent shadow: defenders
+cannot target him and he is immune to damage. Attacking immediately reveals him
+and restarts the timer.
+**Assassinate** throws a dagger up to 320 pixels away. Once it embeds, he waits
+0.6 seconds, teleports to it, and spins for two seconds, hitting that target four
+times per second (2 damage per hit, plus 2 from the dagger). The cooldown is
+10 seconds. He spins in place at the teleport location and stays revealed, but
+cannot be targeted, hit, damaged, stunned, or knocked down during the spin.
+That protection ends immediately when the spin finishes. If the
+marked enemy moves out of melee range, each spin hit instead launches a dagger
+that deals its damage on impact. Afterward he returns to normal movement or falls
+safely to a surface below him; daggers already in flight continue toward their mark.
+Every kill credited to The Slayer resets both Assassinate and his melee cooldown,
+including kills from thrown daggers that land after the spin ends.
+Each kill also immediately triggers the shadow escape below, ending any active
+spin, leaving a clone at his current position, blinking backward, and entering
+stealth. Kill escapes do not consume his health thresholds.
+At 75%, 50%, and 25% HP (once each), a surviving hit makes him leave a stationary
+shadow clone, blink backward up to about 160 pixels onto clear terrain, and enter
+stealth immediately. He pauses attacks for 0.75 seconds before resuming. The clone
+draws defender attacks, dies in one hit, and disappears after four seconds if it
+survives; it cannot attack or inherit his abilities. A hit crossing multiple
+thresholds causes one escape and consumes all crossed thresholds. Healing does
+not restore them, and lethal hits do not trigger an escape.
+He keeps the rogue's size, fast movement, and dagger attacks, with 60 HP and a
+named hero health bar. Like every named hero, he ignores disguised Mimic bait.
+Use **Spawn The Slayer** in desktop settings or the tray menu, or **Add The Slayer**
+in the preview.
+
+**The imovable** stands about a head taller than a normal paladin, with exposed
+head, full plate armor, and a blue-and-gold tower shield. His forward-angled hammer
+is carried in the far hand, behind his body. He has 120 HP and moves at **90% of
+normal adventurer speed**. Between fights he patrols clockwise around the screen,
+following reachable window surfaces and screen edges. His **760-pixel enemy
+detection range** is twice the usual range; he leaves the patrol to pursue a target
+and resumes afterward. His melee reach stays the same as a normal paladin's.
+His **140-pixel protection aura** makes nearby allied adventurers immune to damage
+and gives them golden halos. Defenders prefer him when he is an eligible target.
+Allies who join his squad pick idle wander destinations inside his aura and return
+to him between fights, while combat pursuit and explicit destinations still work.
+Squad members can follow him across hanging surfaces as well as walls and ledges.
+Every **third landed melee hit is SMITE**: three divine hammers appear during the
+swing and strike the enemy in quick succession, each adding 2 damage to the normal
+hit. The Smite also heals living allies inside the aura for **2 HP**, once per
+Smite, capped at their maximum health. Misses do not advance the hit counter.
+Taking damage also triggers a **hammer throw** at the nearest enemy outside his
+normal melee range. He finishes any current swing, winds up, and throws his actual
+hammer for **4 damage**; it spins back into his far hand afterward. Only one hammer
+can be out at a time, with no additional cooldown. The throw does not advance his
+melee counter or trigger Smite healing, and blocked damage does not trigger it.
+Use **Spawn The imovable** in desktop settings or the tray menu, or
+**Add The imovable** in the preview.
+
+**The Hunter** uses the ranger's green stick-figure proportions and movement, with
+thicker body lines and a brown cowboy hat. He carries a long scoped sniper rifle
+in both hands, a wood-stock shotgun on his back, and a holstered pistol on each
+hip. He has 60 HP and a named hero health bar. His sniper has global range, deals
+**10 damage**, and has a **30-second cooldown**. At close range he prioritizes a
+**4-damage shotgun cone**, with a **6-second cooldown**; after firing and a brief
+recoil, he rolls backward along his current ledge. Between special attacks he
+fires both pistols in alternating shots for **0.5 damage per bullet**, stepping
+backward while keeping his guns aimed at the enemy. Once he has enough space he
+holds his distance and keeps shooting; enemies beyond pistol range draw him closer.
+Each weapon keeps its own cooldown, and spare guns stay visibly on his body.
+Use **Spawn The Hunter** in desktop settings or the tray menu, or **Add The Hunter**
+in the preview.
+
+**Hero Cleric** retains the regular cleric's movement and healing pulse, with **60
+HP** and a named hero health bar. His thicker white-gold figure wears the cleric
+robe beneath a large radiant halo. The orb on his staff is replaced by a glowing,
+twelve-rayed sun that follows the full staff-raising animation. A warm divine aura,
+rising motes, and concentric ground light make his presence clear at a glance.
+When a regular adventurer dies while he lives, its soul streaks to him and joins
+the souls orbiting his aura. **Heroes Never Die!** raises every gathered soul at
+his location after they settle into orbit. Each soul has a **25% chance to return
+as a cleric**, a **25% chance to return as a paladin**, and otherwise returns as
+its original class. Resurrected adventurers return at full health and resume
+wandering. The preview's Attack control casts immediately after the souls arrive;
+on the desktop he casts automatically after their short visible orbit.
+Use **Spawn Hero Cleric** in desktop settings or the tray menu, or **Add Hero Cleric**
+in the preview.
+
+**The Soulforger** replaces the old Hero Fighter implementation. He uses the
+ordinary Fighter's skeleton, gait, navigation, climbing, and terrain recovery,
+with **60 HP**, thicker body lines, fitted full plate, a divine-silver trident,
+and a full shield. He has no wings or flight behavior. On aggro he marks one enemy
+until it dies or leaves the world, moves at twice normal speed while pursuing it,
+and deals +1 damage to it. At range he can throw a piercing spectral trident; on
+the same walkable surface he can leap into a six-hit trident-and-shield flurry.
+Taking nonfatal damage can also launch a spectral shield at a nearby marked enemy.
+Use **Spawn The Soulforger** in desktop settings or the tray menu, or **Add The
+Soulforger** in the preview. See [the hero setup](docs/hero-fighter/README.md).
+
 ## Run the preview
 
 ```bash
@@ -112,7 +317,7 @@ The preview starts with just your stickman (green marker); add adventurers and m
 | Input | Action |
 |---|---|
 | Drag a goblin | Pick it up and drop it on the surface below |
-| `N` / Add stickman, `G` / Add goblin, `M` / Add worm, `B` / Add dragon, `I` / Add mind flayer, `P` / Add displacer beast, `T` / Add minotaur, `L` / Add lich, `C` / Add mimic | Spawn a wandering adventurer (random class), another goblin, a burrow worm, a dragon (random colour), a mind flayer, a displacer beast, a minotaur, a lich, or a mimic (disguised as a chest) |
+| `N` / Add stickman, `Q` / Add Graveknights, `G` / Add goblin, `M` / Add worm, `B` / Add dragon, `I` / Add mind flayer, `P` / Add displacer beast, `T` / Add minotaur, `L` / Add lich, `C` / Add mimic | Spawn a wandering adventurer (random class), a four-Graveknight squad, another goblin, a burrow worm, a dragon (random colour), a mind flayer, a displacer beast, a minotaur, a lich, or a mimic (disguised as a chest) |
 | `V` | Recolour the dragons to the next colour (red, green, blue, black, white); with no dragon about, a red one flies in |
 | `Tab` | Select the next stickman; the keys below act on the selected one |
 | Click empty space | Pathfind there (snaps to the nearest surface) |
@@ -152,7 +357,8 @@ src/dungeons_desktops/
     actors/               shared Actor, Mortal, movement, and hunting foundations
     effects/              shared breath, fire, ballistics, gore, and projectiles
     adventurers/          Stickman behavior, conditions, model, spells, and weapons
-    heroes/dio/           Dio behavior and equipment
+    heroes/hero_fighter/  The Soulforger behavior, equipment, and effects
+    heroes/natures_wrath/ hero druid behavior, goblin rig, and mohawk
     defenders/<feature>/  each defender's actor, support code, equipment, and renderer
   render/                 primitives, equipment, shared effects, HUD, and scene dispatch
   desktop/                desktop session, persistent menu, windows, and overlay
@@ -171,7 +377,7 @@ New code imports feature APIs or their focused canonical modules:
 ```python
 from dungeons_desktops.game.world import SimWorld, World
 from dungeons_desktops.game.defenders.dragon import Dragon
-from dungeons_desktops.game.heroes.dio import Dio
+from dungeons_desktops.game.heroes.hero_fighter import HeroFighter
 from dungeons_desktops.rig.equipment import Sword
 from dungeons_desktops.render.scene import draw_actors
 ```

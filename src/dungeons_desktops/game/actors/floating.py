@@ -1,4 +1,4 @@
-"""Floating along a stickman's routes: what the mind flayer and the floating elementals
+"""Floating along a stickman's routes: what the mind flayer
 share.
 
 A `Floater` routes exactly like a stickman (its `planner`: across window tops, up and

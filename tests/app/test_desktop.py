@@ -9,6 +9,8 @@ from dungeons_desktops.desktop.session import (
 )
 from dungeons_desktops.desktop.windows import FakeWindowSource, WindowRecord, WindowTracker
 from dungeons_desktops.game.adventurers.actor import StickMode
+from dungeons_desktops.game.defenders.graveknights.actor import GRAVEKNIGHT_PACK
+from dungeons_desktops.game.defenders.zombies.actor import ZOMBIE_PACK
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.navigation.terrain import SurfaceKind
 
@@ -156,7 +158,6 @@ def test_goblin_pack_musters_on_the_floor_when_no_window_top_fits_it():
 def test_next_monster_now_rotates_through_every_defender_from_the_chimera():
     world = DesktopSession(SCREEN, USABLE, FakeWindowSource([]), seed=5, max_stickmen=0)
     assert world.defender == "chimera" and len(world.chimeras) == 1 and not world.lizards
-    assert not world.elementals
     world.rotate()
     assert world.defender == "drow" and len(world.lizards) == 2 and not world.drakes
     assert not world.chimeras
@@ -185,14 +186,25 @@ def test_next_monster_now_rotates_through_every_defender_from_the_chimera():
     assert world.defender == "worm" and len(world.worms) == 1
     assert not world.goblins and not world.mindflayers
     world.rotate()
+    assert world.defender == "zombies" and len(world.zombies) == ZOMBIE_PACK
+    assert not world.worms
+    world.rotate()
+    assert world.defender == "graveknights"
+    assert len(world.graveknights) == GRAVEKNIGHT_PACK
+    assert not world.zombies and not world.goblins
+    world.rotate()
     assert world.defender == "goblins"
-    assert len(world.goblins) == GOBLIN_SQUAD and not world.worms
+    assert (
+        len(world.goblins) == GOBLIN_SQUAD
+        and not world.worms
+        and not world.zombies
+        and not world.graveknights
+    )
     world.rotate()
     assert world.defender == "dragon" and len(world.dragons) == 1
     assert not world.goblins and not world.worms
     world.rotate()
     assert world.defender == "chimera" and len(world.chimeras) == 1
-    assert not world.elementals
     assert not world.dragons
 
 

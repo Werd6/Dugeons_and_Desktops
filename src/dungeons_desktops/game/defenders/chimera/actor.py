@@ -177,6 +177,8 @@ class Chimera(Mortal):
             Leg(front=False, near=True, phase_offset=0.5),
         ]
         self.goat = GoatHead()
+        self.lion_breath = GoatHead("lion")
+        self.snake_breath = GoatHead("snake")
         self.snake = SnakeTail()
         self._lion_idle = Mouth(wait=self._fx.uniform(1.0, 4.0))
         self._goat_idle = Mouth(wait=self._fx.uniform(2.0, 6.0))
@@ -246,7 +248,11 @@ class Chimera(Mortal):
 
     @property
     def flames(self) -> list:
-        return self.goat.flames
+        return [
+            *self.goat.flames,
+            *self.lion_breath.flames,
+            *self.snake_breath.flames,
+        ]
 
     def center(self) -> Vec2:
         return self.body
@@ -296,6 +302,9 @@ class Chimera(Mortal):
         self.snake.update(dt, self)
         self._pose(dt)
         self.goat.update(dt, self)
+        if getattr(self, "legendary", False):
+            self.lion_breath.update(dt, self)
+            self.snake_breath.update(dt, self)
         self.snake.bite(self)
 
     def _turn(self, direction: int) -> None:
@@ -316,6 +325,8 @@ class Chimera(Mortal):
         self.goat_angle = flip_angle(self.goat_angle)
         self.snake_angle = flip_angle(self.snake_angle)
         self.goat.reflect(mirror)
+        self.lion_breath.reflect(mirror)
+        self.snake_breath.reflect(mirror)
         self.tail = [flip(p) for p in self.tail]
         for leg in self.legs:
             leg.foot, leg.knee, leg.root = flip(leg.foot), flip(leg.knee), flip(leg.root)
@@ -390,11 +401,14 @@ class Chimera(Mortal):
     def _pose_jaws(self, dt: float, snap: bool) -> None:
         rate = 1.0 if snap else min(1.0, dt * 14.0)
         lion = 1.0 if self.prowl.pouncing else self._lion_idle.jaw
+        if getattr(self, "legendary", False):
+            lion = max(lion, self.lion_breath.jaw)
         self.lion_jaw += (lion - self.lion_jaw) * rate
         goat_idle = self._goat_idle.jaw if self.goat.state is Fire.READY else 0.0
         self.goat_jaw = max(self.goat.jaw, goat_idle)
         snake_idle = self._snake_idle.jaw if self.snake.state is Strike.REST else 0.0
-        self.snake_jaw = max(self.snake.jaw, snake_idle)
+        snake_fire = self.snake_breath.jaw if getattr(self, "legendary", False) else 0.0
+        self.snake_jaw = max(self.snake.jaw, snake_idle, snake_fire)
 
     def _pose_heads(self, dt: float, snap: bool) -> None:
         t = self.clock
@@ -460,14 +474,16 @@ class Chimera(Mortal):
         self.velocity = push * 0.2 + self.prowl.velocity * 0.5
         self.prowl.loose()
         self.snake.reset()
-        if self.goat.state is not Fire.COOLDOWN:
-            self.goat.state, self.goat.target = Fire.COOLDOWN, None
+        for breath in (self.goat, self.lion_breath, self.snake_breath):
+            if breath.state is not Fire.COOLDOWN:
+                breath.state, breath.target = Fire.COOLDOWN, None
         self.gait = 0.0
 
     def update_dead(self, dt: float) -> None:
         self.clock += dt
         self.down_time += dt
-        self.goat.step_flames(dt, self)
+        for breath in (self.goat, self.lion_breath, self.snake_breath):
+            breath.step_flames(dt, self)
         ground = self._ground_below(Vec2(self.body.x, self.body.y))
         rest = ground - LYING_HEIGHT
         down = self.body.y >= rest - 0.5 and self.velocity.y >= 0.0

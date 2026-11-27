@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPolygonF
 
 from dungeons_desktops.core.geometry import Vec2, smoothstep
 from dungeons_desktops.game.defenders.chimera.actor import Chimera, Leg
+from dungeons_desktops.render.chromatic import chromatic_appearance
 from dungeons_desktops.render.effects import draw_fire
 from dungeons_desktops.render.primitives import qt, world_pen
 from dungeons_desktops.rig.ik import two_bone_points
@@ -20,6 +21,9 @@ LION = QColor(204, 166, 108)
 LION_FAR = QColor(150, 118, 76)
 LION_LIGHT = QColor(232, 206, 156)
 MANE = QColor(164, 86, 36)
+PRIMAL_MANE = QColor(238, 132, 42)
+GOLD = QColor(255, 214, 74)
+GOLD_EDGE = QColor(196, 140, 36)
 GOAT = QColor(46, 42, 50)
 GOAT_FAR = QColor(28, 26, 32)
 HORN = QColor(232, 222, 196)
@@ -45,6 +49,7 @@ def draw_chimeras(
         draw_fire(painter, chimera.flames)
 
 
+@chromatic_appearance
 def draw_chimera(painter: QPainter, chimera: Chimera, outline: QColor | None = None) -> None:
     """Far legs, goat neck and head, body, serpent, near legs, mane and lion head (its
     goat's fire is `draw_fire`)."""
@@ -276,8 +281,9 @@ def _goat_head(painter: QPainter, chimera: Chimera) -> None:
     steps = 6
     points = [at(-1.0 - 12.0 * t, -2.6 - 2.6 * t + 1.8 * t * t) for t in _steps(steps)]
     widths = [2.3 * (1.0 - t) + 0.4 for t in _steps(steps)]
+    horn = GOLD if getattr(chimera, "legendary", False) else HORN
     for k in range(steps):
-        _taper(painter, points[k], points[k + 1], widths[k], widths[k + 1], HORN)
+        _taper(painter, points[k], points[k + 1], widths[k], widths[k + 1], horn)
 
 
 def _steps(count: int) -> list[float]:
@@ -294,14 +300,17 @@ def _mane(
     center, local = chimera.mane, chimera.local
     sway = math.sin(chimera.clock * 1.2) * 0.3
     tufts = 7
+    legendary = getattr(chimera, "legendary", False)
+    bulk = 1.38 if legendary else 1.0
     points = []
     for k in range(72):
         a = math.tau * k / 72
         behind = max(0.0, -math.cos(a))
-        r = 8.4 + 1.0 * abs(math.sin(a * tufts / 2)) + 1.2 * behind + grow
-        sweep = -(1.5 + sway) * behind
+        r = (8.4 + 1.0 * abs(math.sin(a * tufts / 2)) + 1.2 * behind + grow) * bulk
+        sweep = -(1.5 + sway) * behind * bulk
         points.append(center + local(Vec2(math.cos(a) * r * 0.9 + sweep, math.sin(a) * r)))
-    _polygon(painter, outline if outline is not None else MANE, points)
+    color = PRIMAL_MANE if legendary else MANE
+    _polygon(painter, outline if outline is not None else color, points)
 
 
 def _lion_head(painter: QPainter, chimera: Chimera) -> None:
@@ -360,5 +369,14 @@ def _snake_head(painter: QPainter, chimera: Chimera) -> None:
     _polygon(painter, SNAKE_LIGHT, [jaw(-2.0, 0.4), jaw(5.4, 0.4), jaw(4.8, 1.5), jaw(-1.5, 2.0)])
     upper = [at(-2.8, -1.8), at(1.6, -2.4), at(5.0, -1.2), at(6.2, 0.2), at(5.4, 0.7)]
     _polygon(painter, SNAKE, [*upper, at(-2.6, 1.0)])
+    if getattr(chimera, "legendary", False):
+        # One gold fang from the upper lip, longer when the mouth is open.
+        drop = 1.55 + 0.55 * hiss
+        _polygon(
+            painter,
+            GOLD_EDGE,
+            [at(4.35, 0.45), at(5.2, 0.3), at(5.35, drop + 0.15)],
+        )
+        _polygon(painter, GOLD, [at(4.5, 0.5), at(5.05, 0.38), at(5.25, drop)])
     painter.setBrush(EYE)
     painter.drawEllipse(qt(at(2.2, -1.0)), 0.9, 0.7)

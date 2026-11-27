@@ -30,8 +30,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
-from dungeons_desktops.game.defenders.lich.spells import SPELLS
+from dungeons_desktops.game.defenders.lich.spells import BASE_SPELLS
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 
 if TYPE_CHECKING:
@@ -112,7 +113,7 @@ CAST_RELEASE = 0.5
 """The spell leaves his hand this far through the cast (0.45 s in)."""
 CAST_RANGE = 420.0
 """He casts at a foe this close, wherever he is and whether or not he's moving."""
-SPELLBOOK = SPELLS
+SPELLBOOK = BASE_SPELLS
 """His queue, in order: every cast is the next one."""
 SPELL_DELAY = {
     "magic_missiles": 0.9,
@@ -367,6 +368,8 @@ class Lich(Mortal):
 
     def next_spell(self) -> str:
         """The next spell in his queue (and move the queue on)."""
+        if getattr(self, "legendary", False) and "cloudkill" not in self.spells:
+            self.spells.append("cloudkill")
         spell = self.spells[self.spell_index % len(self.spells)]
         self.spell_index = (self.spell_index + 1) % len(self.spells)
         return spell
@@ -643,7 +646,7 @@ class Lich(Mortal):
         much nearer."""
         prey = [s for s in self.world.stickmen if s.prey]
         welcome = [s for s in prey if self._shunned.get(id(s), -1.0) <= self.time]
-        prey = welcome or prey
+        prey = priority_prey(welcome or prey)
         if not prey:
             return None
         center = self.center()
@@ -919,6 +922,12 @@ class Lich(Mortal):
         if not prey:
             return False
         target, group = self._cluster(prey)
+        guards = priority_prey([
+            s for s in prey if getattr(s, "target_priority", 0)
+        ])
+        if guards:
+            target = min(guards, key=lambda s: s.center().distance_to(self.center()))
+            group = self._group_of(target, prey)
         crowd = (
             len(group) >= CLUSTER_DOOR
             and len(group) >= len(self._group_of(foe, prey)) + CLUSTER_GROWTH

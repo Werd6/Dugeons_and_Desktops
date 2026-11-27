@@ -8,13 +8,16 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPainterPathStroker
 
 from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.game.defenders.legendary import LEGENDARY_GOLD
 from dungeons_desktops.game.defenders.worm.actor import Worm
+from dungeons_desktops.render.chromatic import chromatic_appearance
 from dungeons_desktops.render.primitives import qt, world_pen
 
 WORM_SKIN = QColor(214, 128, 132)
 WORM_RIDGE = QColor(160, 84, 92)
 WORM_MOUTH = QColor(70, 16, 24)
 WORM_TOOTH = QColor(255, 255, 255)
+DEVOURER_TOOTH = LEGENDARY_GOLD
 WORM_GHOST = QColor(214, 128, 132, 70)
 WORM_GHOST_EDGE = QColor(120, 70, 60, 110)
 WORM_HEAD_SCALE = 1.425
@@ -24,6 +27,7 @@ WORM_TEETH_PER_JAW = 3
 BURIED_WORM_VISIBLE = False
 
 
+@chromatic_appearance
 def draw_worm(painter: QPainter, worm: Worm, outline: QColor | None = None) -> None:
     points = worm.points
     buried = [worm.buried(point) for point in points]
@@ -71,7 +75,15 @@ def draw_worm(painter: QPainter, worm: Worm, outline: QColor | None = None) -> N
         painter.setBrush(WORM_GHOST)
         painter.drawEllipse(qt(head + Vec2.from_angle(worm.heading, 1.5)), radius, radius)
         return
-    _draw_worm_head(painter, head, worm.heading, radius * WORM_HEAD_SCALE, worm.mouth, outline)
+    _draw_worm_head(
+        painter,
+        head,
+        worm.heading,
+        radius * WORM_HEAD_SCALE,
+        worm.mouth,
+        outline,
+        tooth=DEVOURER_TOOTH if getattr(worm, "legendary", False) else WORM_TOOTH,
+    )
 
 
 def _draw_worm_head(
@@ -81,6 +93,7 @@ def _draw_worm_head(
     radius: float,
     mouth: float,
     outline: QColor | None,
+    tooth: QColor = WORM_TOOTH,
 ) -> None:
     half = WORM_JAW_OPEN + WORM_JAW_STRIKE * mouth
     forward = Vec2.from_angle(heading)
@@ -104,7 +117,7 @@ def _draw_worm_head(
     painter.setPen(world_pen(WORM_MOUTH, 1.2))
     painter.drawPolyline([qt(rim(heading + half)), qt(hinge), qt(rim(heading - half))])
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(WORM_TOOTH)
+    painter.setBrush(tooth)
     for side in (-1.0, 1.0):
         tip = rim(heading + side * half)
         edge = tip - hinge

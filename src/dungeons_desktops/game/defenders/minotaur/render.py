@@ -16,6 +16,7 @@ wall its hands grip above and its hooves kick below.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
@@ -29,6 +30,7 @@ from dungeons_desktops.game.defenders.minotaur.actor import (
     WALL_GAP,
     Minotaur,
 )
+from dungeons_desktops.render.chromatic import chromatic_appearance
 
 HIDE = QColor(116, 72, 46)
 HIDE_FAR = QColor(72, 44, 30)
@@ -38,11 +40,11 @@ HIDE_DEAD = QColor(96, 70, 56)
 HORN = QColor(236, 224, 194)
 HORN_FAR = QColor(176, 164, 138)
 HORN_TIP = QColor(70, 58, 46)
+LEGENDARY_GOLD = QColor(255, 202, 62)
 HOOF = QColor(34, 26, 22)
 EYE = QColor(20, 12, 10)
 EYE_RAGE = QColor(255, 72, 36)
 EYE_GLOW = QColor(255, 80, 30, 110)
-NOSTRIL = QColor(36, 20, 16)
 STEAM = QColor(236, 236, 242)
 
 UPPER_ARM = 15.2
@@ -99,6 +101,21 @@ MUZZLE = [
     Vec2(23.8, -53.9),
 ]
 SNOUT = Vec2(26.2, -54.5)
+# Septum ring in head space: hangs under the muzzle tip and pitches with the head.
+RING_CENTER = Vec2(26.55, -50.9)
+RING_RX = 2.2
+RING_RY = 2.65
+# Angles in degrees (0 = forward/+x, 90 = down): gap is the top buried in the snout.
+RING_GAP_LO = 246.0
+RING_GAP_HI = 294.0
+RING_COVER = [
+    Vec2(24.5, -53.3),
+    Vec2(26.0, -52.85),
+    Vec2(27.15, -52.45),
+    Vec2(26.85, -51.65),
+    Vec2(25.35, -51.75),
+    Vec2(24.35, -52.45),
+]
 EYE_AT = Vec2(21.2, -59.4)
 EAR = [Vec2(15.2, -61.8), Vec2(10.8, -61.7), Vec2(12.7, -59.6), Vec2(15.7, -59.6)]
 HORN_NEAR = [
@@ -487,12 +504,14 @@ def _climb_limb(phase: float) -> Vec2:
     return Vec2(-4.0 * math.sin(math.pi * q) ** 2, y)
 
 
+@chromatic_appearance
 def draw_minotaur(painter: QPainter, bull: Minotaur, outline: QColor | None = None) -> None:
     fig = Figure(bull)
     root = bull.root()
+    scale = bull.size
     painter.save()
     painter.translate(_qt(root))
-    painter.scale(float(bull.facing), 1.0)
+    painter.scale(float(bull.facing) * scale, scale)
     if bull.dead and bull.tilt > 0.0:
         fallen = smoothstep(bull.tilt)
         painter.translate(0.0, -12.0 * fallen)
@@ -609,6 +628,63 @@ def _torso(ink: Ink, fig: Figure, hide: QColor, light: QColor) -> None:
     painter.restore()
 
 
+def _ring_point(h: Callable[[Vec2], Vec2], degrees: float) -> Vec2:
+    """A point on the septum ring in world space (angles: 0 forward, 90 down)."""
+    rad = math.radians(degrees)
+    return h(
+        Vec2(RING_CENTER.x + RING_RX * math.cos(rad), RING_CENTER.y + RING_RY * math.sin(rad))
+    )
+
+
+def _nose_ring(painter: QPainter, h: Callable[[Vec2], Vec2], light: QColor) -> None:
+    """Septum piercing: a gold loop that hangs under the muzzle and goes through it.
+
+    Built in head-local space so it pitches with the bull, with the top of the ring
+    buried under the snout tip instead of drawn as a circle on the face.
+    """
+    # Open loop: skip the top arc where the metal disappears into the hide.
+    span = 360.0 - (RING_GAP_HI - RING_GAP_LO)
+    steps = 32
+    loop = [
+        _ring_point(h, (RING_GAP_HI + span * (i / steps)) % 360.0) for i in range(steps + 1)
+    ]
+    path = QPainterPath()
+    path.moveTo(_qt(loop[0]))
+    for point in loop[1:]:
+        path.lineTo(_qt(point))
+
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    # Outer shade, then bright metal, then a thin inner highlight along the bottom.
+    painter.setPen(_pen(LEGENDARY_GOLD.darker(155), 2.15))
+    painter.drawPath(path)
+    painter.setPen(_pen(LEGENDARY_GOLD, 1.45))
+    painter.drawPath(path)
+    shine = [
+        _ring_point(h, (RING_GAP_HI + span * (0.35 + 0.3 * (i / 8))) % 360.0) for i in range(9)
+    ]
+    gleam = QPainterPath()
+    gleam.moveTo(_qt(shine[0]))
+    for point in shine[1:]:
+        gleam.lineTo(_qt(point))
+    painter.setPen(_pen(LEGENDARY_GOLD.lighter(135), 0.7))
+    painter.drawPath(gleam)
+
+    # Entry beads where the ring pierces out of the hide (far then near).
+    far = _ring_point(h, RING_GAP_LO)
+    near = _ring_point(h, RING_GAP_HI)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(LEGENDARY_GOLD.darker(135))
+    painter.drawEllipse(_qt(far), 0.78, 0.68)
+    painter.setBrush(LEGENDARY_GOLD)
+    painter.drawEllipse(_qt(near), 0.88, 0.75)
+    painter.setBrush(LEGENDARY_GOLD.lighter(140))
+    painter.drawEllipse(_qt(near + Vec2(0.15, -0.15)), 0.28, 0.22)
+
+    # Muzzle tip redrawn over the open top so the ring reads as going through the snout.
+    painter.setBrush(light)
+    painter.drawPath(_smooth([h(p) for p in RING_COVER]))
+
+
 def _head(ink: Ink, fig: Figure, hide: QColor, light: QColor) -> None:
     h = fig.head
     bull = fig.bull
@@ -622,15 +698,15 @@ def _head(ink: Ink, fig: Figure, hide: QColor, light: QColor) -> None:
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(light)
     painter.drawPath(_smooth([h(p) for p in MUZZLE]))
-    painter.setBrush(NOSTRIL)
-    painter.drawEllipse(_qt(h(SNOUT)), 1.3, 1.0)
+    if bull.legendary:
+        _nose_ring(painter, h, light)
     eye = h(EYE_AT)
     if bull.dead:
         painter.setPen(_pen(EYE, 1.1))
         painter.drawLine(_qt(eye - Vec2(1.4, 0.0)), _qt(eye + Vec2(1.4, 0.0)))
         return
     if bull.fury > 0.05:
-        painter.setBrush(_alpha(EYE_GLOW, 200 * bull.fury))
+        painter.setBrush(_alpha(EYE_GLOW, min(255, 200 * bull.fury)))
         painter.drawEllipse(_qt(eye), 3.4, 3.0)
     painter.setBrush(_mix(EYE, EYE_RAGE, bull.fury))
     painter.drawEllipse(_qt(eye), 1.5, 1.3)
@@ -640,7 +716,11 @@ def _horn(ink: Ink, fig: Figure, line: list[Vec2], widths: list[float], color: Q
     points = [fig.head(p) for p in line]
     ink.limb(points, widths, color)
     if ink.detail:
-        ink.limb(points[-2:], widths[-2:], HORN_TIP if color is HORN else HORN_TIP.darker(130))
+        if getattr(fig.bull, "legendary", False):
+            tip = LEGENDARY_GOLD if color is HORN else LEGENDARY_GOLD.darker(125)
+        else:
+            tip = HORN_TIP if color is HORN else HORN_TIP.darker(130)
+        ink.limb(points[-2:], widths[-2:], tip)
 
 
 def _tail(ink: Ink, fig: Figure, color: QColor) -> None:

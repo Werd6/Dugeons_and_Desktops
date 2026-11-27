@@ -177,6 +177,17 @@ def test_killing_a_thrall_releases_an_intellect_devourer():
     assert len(world.devourers) == 1
 
 
+def test_mindflayer_thralls_die_after_one_minute():
+    from dungeons_desktops.game.adventurers.actor import THRALL_LIFETIME
+
+    world = world_with()
+    thrall = thrall_in(world, Vec2(150, FLOOR))
+    assert thrall.mind_devoured and thrall.thrall_age == 0.0
+    assert run(world, THRALL_LIFETIME + 0.2, until=lambda: not thrall.animated)
+    assert thrall not in world.thralls
+    assert len(world.devourers) == 1
+
+
 # ----- intellect devourers ---------------------------------------------------------
 
 
@@ -375,3 +386,180 @@ def test_rotating_on_early_frees_the_thralls():
     world.rotate()
     assert world.defender == "worm" and not world.mindflayers
     assert not thrall.thrall and thrall.prey and thrall.wander
+
+
+def test_legendary_blast_blinks_in_and_starts_a_grab():
+    from dungeons_desktops.game.defenders.legendary import apply_legendary
+
+    world = world_with()
+    flayer = world.add_mindflayer(Vec2(450, WINDOW.top), legendary=True)
+    apply_legendary(flayer)
+    flayer.blast_cooldown = flayer.pulse_cooldown = 99.0
+    victim = world.add_stickman(Vec2(150, FLOOR), "barbarian")
+    before = flayer.center()
+    flayer.bolts.append(Bolt(victim.center() + Vec2(10, 0), victim))
+    assert run(world, 1.0, until=lambda: flayer.power is Power.GRAB)
+    assert victim.paralysed and flayer.victim is victim
+    assert flayer.center().distance_to(before) > 40.0
+    assert flayer.center().distance_to(victim.center()) < 80.0
+
+
+def _open_ritual_rift(world, flayer, offset: float = 0.0):
+    group = [thrall_in(world, Vec2(140 + offset + i * 35, FLOOR)) for i in range(3)]
+    assert run(world, 1.0, until=lambda: flayer.ritual_point is not None)
+    point = flayer.ritual_point
+    assert point is not None
+    for thrall in group:
+        thrall.follower.reset(world.planner.anchor_near(point, walk_only=True))
+        thrall.goal = point
+    before = len(flayer.rifts)
+    assert run(world, 5.0, until=lambda: len(flayer.rifts) > before)
+    return flayer.rifts[-1]
+
+
+def test_legendary_thrall_ritual_opens_a_sentry_rift():
+    from dungeons_desktops.game.defenders.legendary import apply_legendary
+    from dungeons_desktops.game.defenders.mindflayer.rift import RIFT_OPEN_TIME
+
+    world = world_with([], seed=2)
+    flayer = world.add_mindflayer(Vec2(200, FLOOR), legendary=True)
+    apply_legendary(flayer)
+    rift = _open_ritual_rift(world, flayer)
+    assert run(world, RIFT_OPEN_TIME + 0.2, until=lambda: rift.opened)
+    assert rift.strike is None
+    assert rift.eaten == 0
+
+
+def _force_seize(rift, victim, world):
+    from dungeons_desktops.game.defenders.mindflayer.rift import RiftStrike, _seize
+
+    strike = RiftStrike(tip=victim.center(), phase=0.0)
+    rift.strike = strike
+    _seize(rift, strike, victim, world)
+
+
+def test_rift_sentry_drags_adventurers_through_and_spawns_aboleth_after_five():
+    from dungeons_desktops.game.defenders.aboleth.actor import ABOLETH_HP, EMERGE_TIME
+    from dungeons_desktops.game.defenders.legendary import apply_legendary
+    from dungeons_desktops.game.defenders.mindflayer.rift import (
+        ABOLETH_DELIVER_HOLD,
+        RIFT_MEALS,
+        RIFT_OPEN_TIME,
+    )
+
+    world = world_with([], seed=4)
+    flayer = world.add_mindflayer(Vec2(200, FLOOR), legendary=True)
+    apply_legendary(flayer)
+    rift = _open_ritual_rift(world, flayer)
+    assert run(world, RIFT_OPEN_TIME + 0.2, until=lambda: rift.opened)
+    victims = [world.add_stickman(Vec2(300 + i * 20, FLOOR), "fighter") for i in range(RIFT_MEALS)]
+    start_x = victims[0].center().x
+
+    _force_seize(rift, victims[0], world)
+    assert not victims[0].animated and not victims[0].prey
+    assert victims[0].rift_held_by is rift
+    assert run(world, 3.0, until=lambda: abs(victims[0].center().x - start_x) > 20.0)
+    assert victims[0].center().x < start_x
+    assert run(world, 8.0, until=lambda: rift.eaten >= 1)
+    assert victims[0].swallowed and victims[0].gone
+    assert victims[0] not in world.stickmen
+    for victim in victims[1:]:
+        assert rift.strike is None
+        _force_seize(rift, victim, world)
+        before = rift.eaten
+        assert run(world, 10.0, until=lambda eaten=before: rift.eaten > eaten)
+        assert victim.swallowed and victim.gone
+    assert rift.eaten >= RIFT_MEALS == 5
+    assert rift.delivered
+    assert flayer.herald_aboleth is not None
+    assert flayer.herald_aboleth in world.aboleths
+    assert flayer.herald_aboleth.max_hp == ABOLETH_HP
+    assert flayer.herald_aboleth.emerge is not None
+    assert run(world, ABOLETH_DELIVER_HOLD + EMERGE_TIME + 0.2, until=lambda: rift not in flayer.rifts)
+    assert flayer.herald_aboleth.emerge is None
+
+
+def test_rift_lashes_within_reach_and_eats_thralls():
+    from dungeons_desktops.game.actors.hunting import nearest
+    from dungeons_desktops.game.defenders.legendary import apply_legendary
+    from dungeons_desktops.game.defenders.mindflayer.rift import (
+        RIFT_OPEN_TIME,
+        SENTRY_REACH,
+    )
+
+    world = world_with([], seed=6)
+    flayer = world.add_mindflayer(Vec2(200, FLOOR), legendary=True)
+    apply_legendary(flayer)
+    rift = _open_ritual_rift(world, flayer)
+    assert run(world, RIFT_OPEN_TIME + 0.2, until=lambda: rift.opened)
+    thrall = world.add_stickman(Vec2(rift.center.x + SENTRY_REACH * 0.4, FLOOR), "fighter")
+    thrall.enthrall()
+    free = world.add_stickman(Vec2(rift.center.x + SENTRY_REACH + 80.0, FLOOR), "fighter")
+    assert run(world, 2.0, until=lambda: rift.strike is not None and rift.strike.victim is thrall)
+    assert thrall.rift_held_by is rift and not thrall.prey
+    hunt = nearest()
+    assert hunt.update(0.0, rift.center, world.stickmen) is free
+    before = rift.eaten
+    assert run(world, 8.0, until=lambda: rift.eaten > before)
+    assert thrall.swallowed and thrall.gone
+    assert thrall not in world.stickmen
+
+
+def test_thralls_wait_for_aboleth_banish_before_opening_another_rift():
+    from dungeons_desktops.game.defenders.aboleth.actor import (
+        BANISH_CLOSE,
+        BANISH_OPEN,
+        BANISH_SWIM,
+    )
+    from dungeons_desktops.game.defenders.legendary import apply_legendary
+
+    world = world_with([], seed=3)
+    flayer = world.add_mindflayer(Vec2(200, FLOOR), legendary=True)
+    apply_legendary(flayer)
+    _open_ritual_rift(world, flayer, 0.0)
+    assert len(flayer.rifts) == 1
+
+    # Extra thralls cannot tear a second rift while the first is still open.
+    group = [thrall_in(world, Vec2(400 + i * 35, FLOOR)) for i in range(3)]
+    run(world, 2.0)
+    assert flayer.ritual_point is None
+    assert len(flayer.rifts) == 1
+
+    # Deliver an aboleth directly (as the fifth meal would) and seal the tear.
+    from dungeons_desktops.game.defenders.mindflayer.rift import RIFT_MEALS
+
+    rift = flayer.rifts[0]
+    rift.eaten = RIFT_MEALS
+    assert run(world, 0.1, until=lambda: rift.delivered and flayer.herald_aboleth is not None)
+    aboleth = flayer.herald_aboleth
+    assert aboleth is not None
+    rift.close_after = rift.age
+    assert run(world, 1.0, until=lambda: rift not in flayer.rifts)
+    assert flayer.herald_aboleth is aboleth
+
+    # Still blocked while the aboleth lives.
+    for thrall in group:
+        if thrall in world.stickmen:
+            thrall.ritual_bound = False
+            thrall.ritual_goal = None
+    run(world, 1.5)
+    assert flayer.ritual_point is None
+    assert not flayer.rifts
+
+    # Banishing the aboleth frees the herald to open another tear.
+    world.hurt_monster(aboleth, aboleth.max_hp, aboleth.center(), Vec2(0.0, 0.0))
+    assert aboleth.banishing and aboleth.portal is not None
+    assert flayer.herald_aboleth is aboleth
+    assert run(
+        world,
+        BANISH_OPEN + BANISH_SWIM + BANISH_CLOSE + 0.2,
+        until=lambda: aboleth.gone and flayer.herald_aboleth is None,
+    )
+
+    fresh = [thrall_in(world, Vec2(160 + i * 35, FLOOR)) for i in range(3)]
+    assert run(world, 1.0, until=lambda: flayer.ritual_point is not None)
+    point = flayer.ritual_point
+    for thrall in fresh:
+        thrall.follower.reset(world.planner.anchor_near(point, walk_only=True))
+        thrall.goal = point
+    assert run(world, 5.0, until=lambda: len(flayer.rifts) >= 1)

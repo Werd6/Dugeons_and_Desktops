@@ -23,7 +23,14 @@ from dungeons_desktops.game.adventurers.weapons import (
     HolyStaff,
     Wand,
 )
-from dungeons_desktops.game.heroes.dio.weapon import HeroTridentAndShield
+from dungeons_desktops.game.heroes.hero_alchemist.weapon import GreenVials
+from dungeons_desktops.game.heroes.hero_cleric.weapon import SunStaff
+from dungeons_desktops.game.heroes.hero_fighter.weapon import SoulforgedTridentAndShield
+from dungeons_desktops.game.heroes.hero_paladin.weapon import TowerHammerAndShield
+from dungeons_desktops.game.heroes.hero_sorcerer.weapon import SkullFocus
+from dungeons_desktops.game.heroes.the_hunter.weapon import HunterArsenal
+from dungeons_desktops.game.heroes.the_mighty.weapon import HeavyAxe
+from dungeons_desktops.game.heroes.the_slayer.weapon import SlayerDaggers
 from dungeons_desktops.navigation.planner import MoveSettings
 from dungeons_desktops.rig.biped import UP, BipedLayout
 from dungeons_desktops.rig.climb import ClimbSettings
@@ -109,9 +116,66 @@ CLASSES: dict[str, Calling] = {
 }
 """The adventurer classes that invade the desktop."""
 HEROES: dict[str, Calling] = {
-    "hero_fighter": Calling(
-        HeroTridentAndShield,
+    "hero_alchemist": Calling(
+        GreenVials,
         hp=60,
+        speed=CLASSES["alchemist"].speed,
+        reach=CLASSES["alchemist"].reach,
+        cooldown=CLASSES["alchemist"].cooldown,
+    ),
+    "hero_sorcerer": Calling(
+        SkullFocus,
+        hp=60,
+        speed=CLASSES["sorcerer"].speed,
+        reach=CLASSES["sorcerer"].reach,
+        cooldown=CLASSES["sorcerer"].cooldown,
+    ),
+    "hero_cleric": Calling(
+        SunStaff,
+        hp=60,
+        speed=CLASSES["cleric"].speed,
+        cooldown=CLASSES["cleric"].cooldown,
+    ),
+    "hero_ranger": Calling(
+        HunterArsenal,
+        hp=60,
+        speed=CLASSES["ranger"].speed,
+        reach=CLASSES["ranger"].reach,
+        cooldown=CLASSES["ranger"].cooldown,
+    ),
+    "hero_paladin": Calling(
+        TowerHammerAndShield,
+        hp=120,
+        speed=CLASSES["paladin"].speed * 0.9,
+        reach=CLASSES["paladin"].reach,
+        cooldown=CLASSES["paladin"].cooldown,
+    ),
+    "hero_rogue": Calling(
+        SlayerDaggers,
+        hp=60,
+        speed=CLASSES["rogue"].speed,
+        reach=CLASSES["rogue"].reach,
+        cooldown=CLASSES["rogue"].cooldown,
+    ),
+    "hero_wizard": Calling(
+        Wand,
+        hp=60,
+        speed=CLASSES["wizard"].speed,
+        reach=WIZARD_REACH,
+        cooldown=CAST_COOLDOWN,
+    ),
+    "hero_barbarian": Calling(
+        HeavyAxe,
+        hp=60,
+        speed=CLASSES["barbarian"].speed,
+        reach=CLASSES["barbarian"].reach * 1.5,
+        cooldown=CLASSES["barbarian"].cooldown,
+    ),
+    "hero_druid": Calling(None, hp=60, speed=CLASSES["druid"].speed),
+    "hero_fighter": Calling(
+        SoulforgedTridentAndShield,
+        hp=60,
+        speed=CLASSES["fighter"].speed,
         reach=38.0,
         cooldown=0.8,
     ),

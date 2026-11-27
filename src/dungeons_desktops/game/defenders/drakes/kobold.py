@@ -18,11 +18,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.defenders.drakes.drake import (
     ARROW_GRAVITY,
     ARROW_SPEED,
-    BOW_RANGE,
     RIDER_HEAD,
     RIDER_TORSO,
     Missile,
@@ -47,6 +47,8 @@ APPROACH = 0.6
 """Fraction of his run he closes in at when nobody is in bow range."""
 STRIDE = 6.0
 GRAVITY = 600.0
+FOOT_BOW_RANGE = 420.0
+"""How far a kobold on foot can shoot — farther than the mounted bow."""
 BOW_COOLDOWN = (1.6, 2.2)
 STEADY = 10.0
 """He only looses an arrow once he has slowed below this."""
@@ -100,6 +102,8 @@ class Kobold(Mortal):
         self.bow_cooldown = rng.uniform(0.4, 0.9)
         self.trap_cooldown = rng.uniform(1.0, 4.0)
         self._fx = random.Random(len(self.world.kobolds) * 104729 + 7)
+        self.alpha = False
+        """True when this kobold leapt from the legendary red pack alpha."""
         if self.velocity.length() < 1e-6:
             self._land_if_down(self.foot)
 
@@ -247,12 +251,22 @@ class Kobold(Mortal):
             self.velocity = ZERO
             self.speed = 0.0
 
+    def _bow_cadence(self) -> tuple[float, float]:
+        low, high = BOW_COOLDOWN
+        if self.alpha or (getattr(self, "legendary", False) and self.variant == "red"):
+            return (low * 0.5, high * 0.5)
+        return BOW_COOLDOWN
+
     def _shoot(self, dt: float) -> None:
         """Turn the bow on the nearest adventurer in range; loose once it's drawn and
         he has stopped running."""
         shoulder = self.rider_shoulder
-        in_range = [s for s in self._prey() if s.center().distance_to(shoulder) < BOW_RANGE]
-        target = min(in_range, key=lambda s: s.center().distance_to(shoulder), default=None)
+        in_range = [
+            s for s in self._prey() if s.center().distance_to(shoulder) < FOOT_BOW_RANGE
+        ]
+        target = min(
+            priority_prey(in_range), key=lambda s: s.center().distance_to(shoulder), default=None,
+        )
         self.archer_target = target
         if target is None:
             rest = Vec2(float(self.facing), -0.4).normalized()
@@ -264,7 +278,7 @@ class Kobold(Mortal):
         steady = not self.airborne and abs(self.speed) < STEADY
         if self.bow_cooldown <= 0.0 and steady and self.aim.dot(want) > 0.97:
             self.arrows.append(Missile(self.bow_hand + want * 2.0, velocity))
-            self.bow_cooldown = self._fx.uniform(*BOW_COOLDOWN)
+            self.bow_cooldown = self._fx.uniform(*self._bow_cadence())
 
     # ----- death ---------------------------------------------------------------------
 

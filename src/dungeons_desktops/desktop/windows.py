@@ -13,6 +13,7 @@ which boxes moved, by how much, and which disappeared.
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -78,6 +79,74 @@ class MacWindowSource:
                 float(bounds["Height"]),
             )
             records.append(WindowRecord(int(window["kCGWindowNumber"]), rect))
+        return records
+
+
+class WinWindowSource:
+    """Top-level visible window bounds via Win32 `EnumWindows` (ctypes)."""
+
+    def __init__(self) -> None:
+        if sys.platform != "win32":
+            raise WindowSourceError("WinWindowSource is only available on Windows")
+        import ctypes
+        from ctypes import wintypes
+
+        self._ctypes = ctypes
+        self._user32 = ctypes.windll.user32
+        self._pid = os.getpid()
+        # Logical points for Qt: scale physical GetWindowRect by per-window DPI.
+        self._user32.GetDpiForWindow.restype = wintypes.UINT
+        self._user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+
+    def snapshot(self) -> list[WindowRecord]:
+        ctypes = self._ctypes
+        user32 = self._user32
+        wintypes = ctypes.wintypes
+        records: list[WindowRecord] = []
+
+        GWL_EXSTYLE = -20
+        WS_EX_TOOLWINDOW = 0x00000080
+        WS_EX_NOACTIVATE = 0x08000000
+        GW_OWNER = 4
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        def _enum(hwnd: int, _lparam: int) -> bool:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            if user32.IsIconic(hwnd):
+                return True
+            # Owned / tool windows (floating palettes) are not climbable terrain.
+            if user32.GetWindow(hwnd, GW_OWNER):
+                return True
+            ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            if ex_style & WS_EX_TOOLWINDOW:
+                return True
+            if ex_style & WS_EX_NOACTIVATE and not (ex_style & 0x00040000):  # WS_EX_APPWINDOW
+                pass
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if int(pid.value) == self._pid:
+                return True
+            rect = wintypes.RECT()
+            if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return True
+            left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
+            width, height = float(right - left), float(bottom - top)
+            if width < 1.0 or height < 1.0:
+                return True
+            try:
+                dpi = user32.GetDpiForWindow(hwnd) or 96
+            except Exception:
+                dpi = 96
+            scale = max(float(dpi), 1.0) / 96.0
+            logical = Rect(left / scale, top / scale, width / scale, height / scale)
+            if logical.width < MIN_WIDTH or logical.height < MIN_HEIGHT:
+                return True
+            records.append(WindowRecord(int(hwnd), logical))
+            return True
+
+        if not user32.EnumWindows(_enum, 0):
+            raise WindowSourceError("EnumWindows failed")
         return records
 
 

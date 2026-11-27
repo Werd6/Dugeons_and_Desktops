@@ -4,9 +4,10 @@ Disguised (`Mode.CHEST`) it sits on a window top or the floor, drawn front-on, a
 the adventurers it's just a chest: it isn't one of the world's monsters, can't be
 targeted or hit, and nobody goes after it. Now and then its lid twitches.
 
-Every `LURE_EVERY` it baits its marks: the `LURE_COUNT` nearest adventurers who can walk
-up beside it (skipping anyone who can't, swapping the farthest for a clearly nearer one
-until he's within `LURE_COMMIT`). Each gets a "!" over his head and runs over
+Every `LURE_EVERY` it baits its marks: the `LURE_COUNT` nearest ordinary adventurers
+who can walk up beside it (named heroes ignore the bait; it also skips anyone who
+can't reach it, swapping the farthest for a clearly nearer one until he's within
+`LURE_COMMIT`). Each mark gets a "!" over his head and runs over
 (`Stickman.lure`), ignoring the monsters on the way. The first there springs the trap;
 the rest are let go (no "!", no haste) once it's out of its disguise, or as soon as they
 arrive while it's busy, right there to fight it. Beside it (`Mode.OPEN`) he stows his weapon
@@ -193,6 +194,30 @@ TWITCH_TIME = 0.35
 ESCAPE_REACH = 120.0
 COINS = 7
 CHOMP_FLASH = 0.35
+HOARD_SPIT_RANGE = (45.0, 260.0)
+HOARD_SPIT_COOLDOWN = 1.0
+"""Seconds between legendary hoard sprays."""
+HOARD_SPIT_TIME = 0.75
+"""How long the mouth stays open while it sprays."""
+HOARD_SPIT_WAVES = 3
+"""Bursts of random loot fired during one spray."""
+HOARD_SPIT_DAMAGE = 2
+HOARD_SHOT_SPEED = 300.0
+HOARD_SHOT_LIFE = 1.35
+HOARD_SHOTS = 10
+"""Projectiles per wave: a mix of big weapons and small coin/gem/knife junk."""
+HOARD_HIT = 4.5
+"""Hitbox for the big spat weapons."""
+HOARD_HIT_SMALL = 2.5
+"""Hitbox for the little coins, gems and knives."""
+HOARD_LOFT = 70.0
+"""Aim this far above the target so the volley arcs down onto him."""
+HOARD_BOW, HOARD_AXE, HOARD_SKULL = 0, 1, 2
+HOARD_COIN, HOARD_KNIFE, HOARD_GEM = 3, 4, 5
+HOARD_BIG = (HOARD_BOW, HOARD_AXE, HOARD_SKULL)
+HOARD_SMALL = (HOARD_COIN, HOARD_KNIFE, HOARD_GEM)
+EAT_HEAL = 4
+"""HP restored whenever it swallows someone whole."""
 STRIDE = 7.0
 DUTY = 0.6
 CYCLE = STRIDE / DUTY
@@ -272,6 +297,7 @@ class Knife:
     position: Vec2
     time: float = 0.0
     spin: float = 0.0
+    owner: Stickman | None = None
 
 
 class Mode(Enum):
@@ -291,6 +317,18 @@ class Coin:
     vx: float
     vy: float
     spin: float
+
+
+@dataclass
+class HoardShot:
+    """Loot spat from a legendary mimic: big weapons or small coins, gems and knives."""
+
+    position: Vec2
+    velocity: Vec2
+    kind: int
+    """One of `HOARD_BIG` or `HOARD_SMALL`."""
+    age: float = 0.0
+    spin: float = 0.0
 
 
 def along(up: Vec2) -> Vec2:
@@ -360,6 +398,7 @@ class Mimic(Mortal):
 
     def __init__(self, world: SimWorld, anchor: Anchor, heading: int = 1) -> None:
         self.world = world
+        self.legendary = False
         self.follower: RouteFollower | None = None
         """Its route while it's on a surface; None falling."""
         self.position = anchor.point
@@ -405,6 +444,9 @@ class Mimic(Mortal):
         """In the air on a leap-chomp."""
         self._snapped = False
         self.bite_wait = 0.0
+        self.hoard_wait = 0.8
+        self.hoard_shots: list[HoardShot] = []
+        self._spit_waves = 0
         self.goal: Vec2 | None = None
         self._covering = 0.0
         self._idle = 0.0
@@ -539,6 +581,7 @@ class Mimic(Mortal):
         """`stickman` is still one of its marks (it's alive, here, and luring him)."""
         return (
             not self.dead
+            and not stickman.is_hero
             and (self.victim is stickman or stickman in self.baited)
             and self in self.world.mimics
             and self.mode in (Mode.CHEST, Mode.OPEN)
@@ -556,6 +599,8 @@ class Mimic(Mortal):
     def update(self, dt: float) -> None:
         self.time += dt
         self.mode_time += dt
+        self.hoard_wait -= dt
+        self._update_hoard_shots(dt)
         self.chomp = max(0.0, self.chomp - dt / CHOMP_FLASH)
         self.bite_wait -= dt
         self.gulp = max(0.0, self.gulp - dt / GULP_TIME)
@@ -603,7 +648,10 @@ class Mimic(Mortal):
         first = next((s for s in self.baited if self._arrived(s)), None)
         if first is not None:
             self.baited.remove(first)
-            if first.variant == "rogue":
+            if (
+                first.variant == "rogue"
+                and not getattr(first, "is_shadow_clone", False)
+            ):
                 self._start_spotted(first)
             else:
                 self._start_open(first)
@@ -620,9 +668,15 @@ class Mimic(Mortal):
             (
                 s
                 for s in self.world.stickmen
-                if s.prey and s.stun <= 0.0 and s not in self._ignored and s.lure is None
+                if (
+                    s.prey
+                    and not s.is_hero
+                    and s.stun <= 0.0
+                    and s not in self._ignored
+                    and s.lure is None
+                )
             ),
-            key=self._distance,
+            key=lambda actor: (-getattr(actor, "target_priority", 0), self._distance(actor)),
         )
         tries = 0
         for stickman in prey:
@@ -662,6 +716,7 @@ class Mimic(Mortal):
     def _fit(self, stickman: Stickman) -> bool:
         return (
             stickman.prey
+            and not stickman.is_hero
             and stickman in self.world.stickmen
             and stickman.lure is self
             and stickman.damage == self._bait_damage.get(stickman)
@@ -692,6 +747,8 @@ class Mimic(Mortal):
         return True
 
     def _mark(self, stickman: Stickman) -> None:
+        if stickman.is_hero:
+            return
         self.baited.append(stickman)
         self._bait_damage[stickman] = stickman.damage
         self.lures += 1
@@ -770,7 +827,9 @@ class Mimic(Mortal):
             return
         layout = rogue.layout
         hand = rogue.transforms()[layout.arms[1].bones[-1]].end
-        self.knife = Knife(hand, hand)
+        if (on_attack := getattr(rogue.weapon, "on_attack", None)) is not None:
+            on_attack()
+        self.knife = Knife(hand, hand, owner=rogue)
         self._lure_wait = LURE_DELAY
         landing = self._flip_to
         self.spotter = None
@@ -814,7 +873,7 @@ class Mimic(Mortal):
             self._start_reveal()
         self.chomp, self.chomp_word, self.chomp_at = 0.5, "", target
         push = Vec2(_sign(target.x - knife.start.x) * 40.0, -20.0)
-        self.world.hurt_monster(self, KNIFE_DAMAGE, target, push, ranged=True)
+        self.world.hurt_monster(self, KNIFE_DAMAGE, target, push, ranged=True, attacker=knife.owner)
 
     # ----- the chomp -----------------------------------------------------------------
 
@@ -928,8 +987,11 @@ class Mimic(Mortal):
         self.chomps += 1
         self.gulp = 1.0
         death = "Swallowed whole by a mimic!"
-        man.hurt_from(self, max(CHOMP_DAMAGE, man.hp), point, ZERO, "mimic", death, bleed=False)
-        man.swallowed = True
+        man.swallowed = man.hurt_from(
+            self, max(CHOMP_DAMAGE, man.hp), point, ZERO, "mimic", death, bleed=False,
+        )
+        if man.swallowed:
+            self.damage = max(0, self.damage - EAT_HEAL)
         self._lure_wait = LURE_DELAY
 
     def _let_go_catch(self) -> None:
@@ -1002,6 +1064,15 @@ class Mimic(Mortal):
         reaches = settled and self._reaches(target)
         way = _sign((target.center() - self.center()).dot(along(self.up)))
         distance = target.center().distance_to(self.center())
+        if (
+            getattr(self, "legendary", False)
+            and settled
+            and self.hoard_wait <= 0.0
+            and HOARD_SPIT_RANGE[0] <= distance <= HOARD_SPIT_RANGE[1]
+        ):
+            self.heading = way
+            self._start_attack("spit")
+            return
         if reaches:
             if follower.moving:
                 follower.reset(follower.current_anchor())
@@ -1047,6 +1118,7 @@ class Mimic(Mortal):
         self.attack = kind
         self.attack_time = 0.0
         self._snapped = False
+        self._spit_waves = 0
         self.hop = None
         follower = self.follower
         if follower is not None and not follower.in_transition:
@@ -1162,6 +1234,78 @@ class Mimic(Mortal):
             if t >= SNAP_TIME:
                 self.attack = None
                 self.bite_wait = LEAP_COOLDOWN
+        elif kind == "spit":
+            target = self.target
+            while self._spit_waves < HOARD_SPIT_WAVES:
+                due = HOARD_SPIT_TIME * (0.18 + 0.28 * self._spit_waves)
+                if t < due:
+                    break
+                self._spit_waves += 1
+                if target is not None and target.prey:
+                    self._spit_hoard(target)
+            if t >= HOARD_SPIT_TIME:
+                self.attack = None
+                self.hoard_wait = HOARD_SPIT_COOLDOWN
+
+    def _spit_hoard(self, target: Stickman) -> None:
+        """One wave of mixed big weapons and small junk toward `target`."""
+        mouth = self.mouth()
+        # Lob above him so gravity drops the spray onto the target instead of the floor.
+        aim = (target.center() + Vec2(0.0, -HOARD_LOFT) - mouth).normalized()
+        rng = self.world.random
+        for _ in range(HOARD_SHOTS):
+            spread = rng.uniform(-0.28, 0.28)
+            speed = HOARD_SHOT_SPEED * rng.uniform(0.85, 1.15)
+            velocity = aim.rotated(spread) * speed + target.velocity * 0.2
+            pool = HOARD_BIG if rng.random() < 0.22 else HOARD_SMALL
+            self.hoard_shots.append(
+                HoardShot(
+                    mouth,
+                    velocity,
+                    rng.choice(pool),
+                    spin=rng.uniform(0.0, math.tau),
+                )
+            )
+        self.world.debris.burst(
+            mouth, aim, 8, 150.0, spread=0.45, chunks=3, puffs=3, scale=0.7
+        )
+
+    def _update_hoard_shots(self, dt: float) -> None:
+        kept = []
+        for shot in self.hoard_shots:
+            shot.age += dt
+            shot.velocity += Vec2(0.0, 180.0 * dt)
+            shot.position += shot.velocity * dt
+            if shot.kind == HOARD_KNIFE:
+                shot.spin += 20.0 * dt
+            elif shot.kind in HOARD_BIG:
+                shot.spin += (10.0 if shot.kind == HOARD_BOW else 16.0) * dt
+            else:
+                shot.spin += 14.0 * dt
+            reach = HOARD_HIT if shot.kind in HOARD_BIG else HOARD_HIT_SMALL
+            struck = next(
+                (
+                    stickman
+                    for stickman in self.world.stickmen
+                    if stickman.prey and stickman.hits(shot.position, reach)
+                ),
+                None,
+            )
+            if struck is not None:
+                push = shot.velocity.normalized() * 130.0 + Vec2(0.0, -50.0)
+                struck.hurt_from(
+                    self,
+                    HOARD_SPIT_DAMAGE,
+                    shot.position,
+                    push,
+                    "mimic",
+                    "Buried under a mimic's hoard!",
+                )
+                continue
+            # Hoard junk is extradimensional: it sails through walls and ceilings.
+            if shot.age < HOARD_SHOT_LIFE:
+                kept.append(shot)
+        self.hoard_shots = kept
 
     def _try_gap_hop(self, goal: Anchor) -> bool:
         """Hop straight across to `goal` on another floor or window top, if it's near and
@@ -1662,6 +1806,11 @@ class Mimic(Mortal):
                 back = smoothstep(clamp((t - wind) / (SNAP_TIME - wind), 0.0, 1.0))
                 self.jaw = (1.0 - k) + GAPE * back * k
                 self.lunge = LUNGE * (1.0 - back)
+        elif kind == "spit":
+            # Hold the maw wide for the whole volley so junk clearly flies out of it.
+            self.crouch = _approach(self.crouch, 0.0, 6.0, dt)
+            self.jaw = _approach(self.jaw, 1.0, 14.0, dt)
+            self.lunge = _approach(self.lunge, 0.0, 30.0, dt)
         else:
             self.crouch = _approach(self.crouch, 0.0, 6.0, dt)
             self.jaw = _approach(self.jaw, GAPE + 0.06 * math.sin(self.time * 5.0), 3.0, dt)

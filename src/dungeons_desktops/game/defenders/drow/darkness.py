@@ -34,6 +34,8 @@ BLIND_LINGER = 0.3
 """Out of a globe, an adventurer is blind this much longer."""
 FAERIE_LINGER = 0.6
 """...and his faerie fire burns on this long."""
+LEGENDARY_RADIUS = 105.0
+LEGENDARY_TIME = 9.0
 
 
 @dataclass
@@ -43,27 +45,37 @@ class Orb:
     target: Vec2
     age: float = 0.0
     trail: list[Vec2] | None = None
+    legendary: bool = False
 
 
 @dataclass
 class Globe:
     center: Vec2
     age: float = 0.0
+    legendary: bool = False
+
+    @property
+    def full_radius(self) -> float:
+        return LEGENDARY_RADIUS if self.legendary else GLOBE_RADIUS
+
+    @property
+    def duration(self) -> float:
+        return LEGENDARY_TIME if self.legendary else GLOBE_TIME
 
     @property
     def radius(self) -> float:
-        return GLOBE_RADIUS * smoothstep(min(1.0, self.age / GROW_TIME))
+        return self.full_radius * smoothstep(min(1.0, self.age / GROW_TIME))
 
     @property
     def active(self) -> bool:
-        return self.age < GLOBE_TIME
+        return self.age < self.duration
 
     @property
     def strength(self) -> float:
         """1 while it holds, thinning to 0 as it fades."""
-        if self.age <= GLOBE_TIME:
+        if self.age <= self.duration:
             return 1.0
-        return max(0.0, 1.0 - (self.age - GLOBE_TIME) / FADE_TIME)
+        return max(0.0, 1.0 - (self.age - self.duration) / FADE_TIME)
 
     def covers(self, point: Vec2) -> bool:
         return self.active and point.distance_to(self.center) <= self.radius
@@ -76,13 +88,16 @@ class Darkness:
         self.globes: list[Globe] = []
         self.time = 0.0
 
-    def throw(self, origin: Vec2, target: Vec2) -> Orb:
-        orb = Orb(origin, lobbed(origin, target, ORB_SPEED, ORB_GRAVITY), target, trail=[])
+    def throw(self, origin: Vec2, target: Vec2, legendary: bool = False) -> Orb:
+        orb = Orb(
+            origin, lobbed(origin, target, ORB_SPEED, ORB_GRAVITY), target,
+            trail=[], legendary=legendary,
+        )
         self.orbs.append(orb)
         return orb
 
-    def burst(self, center: Vec2) -> Globe:
-        globe = Globe(center)
+    def burst(self, center: Vec2, legendary: bool = False) -> Globe:
+        globe = Globe(center, legendary=legendary)
         self.globes.append(globe)
         return globe
 
@@ -103,15 +118,22 @@ class Darkness:
             ahead = orb.target - orb.position
             arrived = ahead.length() <= ORB_ARRIVE or ahead.dot(orb.velocity) < 0.0
             if orb.position.y >= world.floor_y:
-                self.burst(Vec2(orb.position.x, world.floor_y - GLOBE_RADIUS * 0.4))
+                self.burst(
+                    Vec2(
+                        orb.position.x,
+                        world.floor_y
+                        - (LEGENDARY_RADIUS if orb.legendary else GLOBE_RADIUS) * 0.4,
+                    ),
+                    orb.legendary,
+                )
             elif arrived or orb.age >= ORB_LIFE:
-                self.burst(orb.position)
+                self.burst(orb.position, orb.legendary)
             else:
                 flying.append(orb)
         self.orbs = flying
         for globe in self.globes:
             globe.age += dt
-        self.globes = [g for g in self.globes if g.age < GLOBE_TIME + FADE_TIME]
+        self.globes = [g for g in self.globes if g.age < g.duration + FADE_TIME]
         for stickman in world.stickmen:
             if stickman.prey and self.covers(stickman.center()):
                 stickman.blind_for(BLIND_LINGER)

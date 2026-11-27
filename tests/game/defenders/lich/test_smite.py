@@ -1,3 +1,5 @@
+import pytest
+
 from dungeons_desktops.core.geometry import Vec2
 from dungeons_desktops.game.defenders.lich.actor import LICH_HP
 from dungeons_desktops.game.defenders.lich.spells import (
@@ -40,8 +42,9 @@ def word(world: SimWorld, lich, foe) -> None:
     run(world, WORD_DELAY + 2 * STEP)
 
 
-def test_slaying_a_cleric_brings_down_a_sword_of_light_for_smite_damage():
-    world, lich, (cleric,) = setup(500)
+@pytest.mark.parametrize("variant", ["cleric", "hero_cleric"])
+def test_slaying_a_cleric_brings_down_a_sword_of_light_for_smite_damage(variant):
+    world, lich, (cleric,) = setup(500, variant=variant)
     word(world, lich, cleric)
     assert not cleric.animated and len(world.necromancy.smites) == 1
     run(world, STRIKE - 0.1)

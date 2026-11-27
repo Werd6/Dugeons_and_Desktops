@@ -9,20 +9,30 @@ from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.desktop.theme import apply_board
 from dungeons_desktops.game.adventurers.model import CLASSES
 from dungeons_desktops.game.defenders.chimera.render import draw_chimeras
 from dungeons_desktops.game.defenders.drakes.render import draw_drakes, draw_kobolds, draw_traps
 from dungeons_desktops.game.defenders.drow.render import draw_darkness, draw_drow, draw_lizards
-from dungeons_desktops.game.defenders.elementals.render import draw_elementals
+from dungeons_desktops.game.defenders.graveknights.render import draw_graveknights
 from dungeons_desktops.game.defenders.hydra.render import draw_hydras
 from dungeons_desktops.game.defenders.lich.render import draw_liches
 from dungeons_desktops.game.defenders.lich.spell_render import draw_necromancy, draw_scorches
 from dungeons_desktops.game.defenders.mimic.render import draw_mimics
 from dungeons_desktops.game.defenders.mindflayer.render import draw_mindflayers
-from dungeons_desktops.game.defenders.ooze.render import draw_oozes
-from dungeons_desktops.game.heroes.dio.render import draw_dio_effects
+from dungeons_desktops.game.defenders.aboleth.render import draw_aboleths
+from dungeons_desktops.game.defenders.zombies.render import draw_zombies
+from dungeons_desktops.game.heroes.hero_cleric.render import draw_divine_judgements
+from dungeons_desktops.game.heroes.hero_fighter.render import draw_hero_fighter_effects
+from dungeons_desktops.game.heroes.hero_paladin.render import draw_paladin_effects
+from dungeons_desktops.game.heroes.natures_wrath.spell_render import draw_nature_spells
+from dungeons_desktops.game.heroes.the_inquisitive.spell_render import draw_iggy_spells
+from dungeons_desktops.game.heroes.the_mighty.render import draw_mighty_effects
+from dungeons_desktops.game.heroes.the_slayer.render import draw_slayer_effects
+from dungeons_desktops.game.unlocks import HERO_NAMES
 from dungeons_desktops.navigation.planner import Move
 from dungeons_desktops.preview.controller import RigPreviewController
+from dungeons_desktops.render.chromatic import draw_chromatic_effects
 from dungeons_desktops.render.hud import draw_kill_marks
 from dungeons_desktops.render.scene import (
     BACKGROUND,
@@ -67,11 +77,12 @@ HELP = (
     "drag a goblin: move it\n"
     "selected (green marker), Tab to switch:  W wander  S stop  R ragdoll  Space get up  "
     "1-9 barbarian/wizard/rogue/paladin/ranger/cleric/alchemist/druid/sorcerer  "
-    "0 fighter  Y Dio  F attack\n"
+    "0 fighter  Y Soulforger  F attack\n"
     "N add adventurer  G add goblin  M add worm  B add dragon  V dragon colour  I add mind flayer  "
-    "P add displacer beast  T add minotaur  U add ooze  L add lich  C add mimic  H add hydra  "
-    "K add kobold drake  Z add drow lizard rider  X add chimera  E add elemental  "
-    "J shift elemental  D surfaces"
+    "P add displacer beast  T add minotaur  L add lich  C add mimic  H add hydra  "
+    "K add kobold drake  Z add drow lizard rider  X add chimera  "
+    "Q add Graveknights  "
+    "D surfaces"
 )
 
 
@@ -133,15 +144,16 @@ class RigCanvas(QWidget):
             draw_worm(painter, worm)
         draw_minotaurs(painter, controller.minotaurs)
         draw_chimeras(painter, controller.chimeras)
-        draw_elementals(painter, controller.elementals)
-        draw_hydras(painter, controller.hydras)
+                draw_hydras(painter, controller.hydras)
         draw_drakes(painter, controller.drakes)
         draw_kobolds(painter, controller.kobolds)
         draw_liches(painter, controller.liches)
         draw_mimics(painter, controller.mimics)
+        draw_zombies(painter, controller.zombies)
+        draw_graveknights(painter, controller.graveknights)
         draw_skeletons(painter, controller.skeletons)
         draw_actors(painter, controller.goblins, controller.stickmen, controller.selected)
-        draw_oozes(painter, controller.oozes)
+                draw_aboleths(painter, controller.aboleths)
         draw_darkness(painter, controller.darkness, controller.stickmen)
         draw_lizards(painter, controller.lizards)
         draw_drow(painter, controller.drow)
@@ -149,7 +161,14 @@ class RigCanvas(QWidget):
             draw_dragon(painter, dragon)
         draw_mindflayers(painter, controller.mindflayers, controller.devourers)
         draw_displacers(painter, controller.displacers)
-        draw_dio_effects(painter, controller.heroes)
+        draw_divine_judgements(painter, controller.heroes)
+        draw_hero_fighter_effects(painter, controller.heroes)
+        draw_nature_spells(painter, controller.heroes)
+        draw_mighty_effects(painter, controller.heroes)
+        draw_iggy_spells(painter, controller.stickmen)
+        draw_slayer_effects(painter, controller.heroes)
+        draw_paladin_effects(painter, controller.heroes)
+        draw_chromatic_effects(painter, controller.chromatic)
         draw_projectiles(painter, controller.projectiles)
         draw_spells(painter, controller.spells)
         draw_necromancy(painter, controller.necromancy)
@@ -207,25 +226,38 @@ class RigPreviewWindow(QWidget):
         self.controller = RigPreviewController(1100, 650)
         self.canvas = RigCanvas(self.controller)
 
-        buttons = QHBoxLayout()
+        strip = QWidget()
+        strip.setObjectName("CommandBoard")
+        buttons = QHBoxLayout(strip)
+        buttons.setContentsMargins(4, 4, 4, 4)
+        buttons.setSpacing(4)
         for label, action in (
             ("Add stickman", self.controller.spawn_stickman),
-            ("Add Dio", self.controller.spawn_dio),
+            (f"Add {HERO_NAMES['hero_fighter']}", self.controller.spawn_hero_fighter),
+            (f"Add {HERO_NAMES['hero_druid']}", self.controller.spawn_natures_wrath),
+            (f"Add {HERO_NAMES['hero_barbarian']}", self.controller.spawn_mighty),
+            (f"Add {HERO_NAMES['hero_wizard']}", self.controller.spawn_iggy),
+            (f"Add {HERO_NAMES['hero_rogue']}", self.controller.spawn_slayer),
+            (f"Add {HERO_NAMES['hero_paladin']}", self.controller.spawn_hero_paladin),
+            (f"Add {HERO_NAMES['hero_ranger']}", self.controller.spawn_hunter),
+            (f"Add {HERO_NAMES['hero_cleric']}", self.controller.spawn_hero_cleric),
+            (f"Add {HERO_NAMES['hero_alchemist']}", self.controller.spawn_hero_alchemist),
+            (f"Add {HERO_NAMES['hero_sorcerer']}", self.controller.spawn_hero_sorcerer),
+            ("Add zombie", self.controller.spawn_zombie),
+            ("Add Graveknights", self.controller.spawn_graveknights),
             ("Add goblin", self.controller.spawn_goblin),
             ("Add worm", self.controller.spawn_worm),
             ("Add dragon", self.controller.spawn_dragon),
             ("Add mind flayer", self.controller.spawn_mindflayer),
             ("Add displacer beast", self.controller.spawn_displacer),
             ("Add minotaur", self.controller.spawn_minotaur),
-            ("Add ooze", self.controller.spawn_ooze),
+            ("Add aboleth", self.controller.spawn_aboleth),
             ("Add lich", self.controller.spawn_lich),
             ("Add mimic", self.controller.spawn_mimic),
             ("Add hydra", self.controller.spawn_hydra),
             ("Add drake", self.controller.spawn_drake),
             ("Add drow", self.controller.spawn_drow),
             ("Add chimera", self.controller.spawn_chimera),
-            ("Add elemental", self.controller.spawn_elemental),
-            ("Shift elemental", self.controller.shift_elementals),
             ("Wander", self.controller.toggle_wander),
             ("Stop", self.controller.stop),
             ("Ragdoll", self.controller.go_ragdoll),
@@ -239,10 +271,11 @@ class RigPreviewWindow(QWidget):
             button.clicked.connect(action)
             buttons.addWidget(button)
         buttons.addStretch(1)
+        apply_board(strip)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
-        root.addLayout(buttons)
+        root.addWidget(strip)
         root.addWidget(self.canvas, 1)
         self.resize(1280, 820)
 
@@ -271,7 +304,8 @@ class RigPreviewWindow(QWidget):
             },
             Qt.Key.Key_F: self.controller.attack,
             Qt.Key.Key_N: self.controller.spawn_stickman,
-            Qt.Key.Key_Y: self.controller.spawn_dio,
+            Qt.Key.Key_Y: self.controller.spawn_hero_fighter,
+            Qt.Key.Key_Q: self.controller.spawn_graveknights,
             Qt.Key.Key_G: self.controller.spawn_goblin,
             Qt.Key.Key_M: self.controller.spawn_worm,
             Qt.Key.Key_B: self.controller.spawn_dragon,
@@ -279,15 +313,12 @@ class RigPreviewWindow(QWidget):
             Qt.Key.Key_I: self.controller.spawn_mindflayer,
             Qt.Key.Key_P: self.controller.spawn_displacer,
             Qt.Key.Key_T: self.controller.spawn_minotaur,
-            Qt.Key.Key_U: self.controller.spawn_ooze,
             Qt.Key.Key_L: self.controller.spawn_lich,
             Qt.Key.Key_C: self.controller.spawn_mimic,
             Qt.Key.Key_H: self.controller.spawn_hydra,
             Qt.Key.Key_K: self.controller.spawn_drake,
             Qt.Key.Key_Z: self.controller.spawn_drow,
             Qt.Key.Key_X: self.controller.spawn_chimera,
-            Qt.Key.Key_E: self.controller.spawn_elemental,
-            Qt.Key.Key_J: self.controller.shift_elementals,
             Qt.Key.Key_Tab: self.controller.select_next,
             Qt.Key.Key_Escape: self.close,
         }

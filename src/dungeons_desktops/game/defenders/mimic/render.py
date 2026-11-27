@@ -17,12 +17,19 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
+from dungeons_desktops.game.defenders.lich.skeleton_render import draw_skeleton_skull
 from dungeons_desktops.game.defenders.mimic.actor import (
     BOX_HEIGHT,
     CHEST_DEPTH,
     CHEST_WIDTH,
     DUST_TIME,
     HEIGHT,
+    HOARD_AXE,
+    HOARD_BOW,
+    HOARD_COIN,
+    HOARD_GEM,
+    HOARD_KNIFE,
+    HOARD_SKULL,
     LID_ARCH,
     LID_HEIGHT,
     Coin,
@@ -30,6 +37,9 @@ from dungeons_desktops.game.defenders.mimic.actor import (
     Mimic,
     Mode,
 )
+from dungeons_desktops.render.chromatic import chromatic_appearance
+from dungeons_desktops.render.equipment import draw_strokes
+from dungeons_desktops.rig.equipment import Axe, Bow, Stroke
 
 WOOD = QColor(150, 96, 52)
 WOOD_DARK = QColor(104, 64, 34)
@@ -196,6 +206,7 @@ def _awake(mimic: Mimic) -> float:
 def _draw_front(canvas: Canvas, mimic: Mimic, f: Frame) -> None:
     w = CHEST_WIDTH / 2
     h = BOX_HEIGHT
+    fitting = BRASS if getattr(mimic, "legendary", False) else IRON
     swing = _swing(mimic)
     gap = GAP_OPEN * swing
     box = [f(-w, 0.0), f(w, 0.0), f(w, h), f(-w, h)]
@@ -205,8 +216,8 @@ def _draw_front(canvas: Canvas, mimic: Mimic, f: Frame) -> None:
     for z in (h * 0.36, h * 0.68):
         canvas.line([f(-w + 0.8, z), f(w - 0.8, z)], GRAIN, 0.3, False)
     for x0, x1 in ((-w * 0.8, -w * 0.6), (w * 0.6, w * 0.8)):
-        canvas.poly([f(x0, 0.0), f(x1, 0.0), f(x1, h), f(x0, h)], IRON, None, 0.3, False)
-    canvas.poly([f(-w, 0.0), f(w, 0.0), f(w, 0.9), f(-w, 0.9)], IRON, None, 0.3, False)
+        canvas.poly([f(x0, 0.0), f(x1, 0.0), f(x1, h), f(x0, h)], fitting, None, 0.3, False)
+    canvas.poly([f(-w, 0.0), f(w, 0.0), f(w, 0.9), f(-w, 0.9)], fitting, None, 0.3, False)
     plate = [f(-2.2, h * 0.3), f(2.2, h * 0.3), f(2.2, h), f(-2.2, h)]
     canvas.poly(plate, BRASS, BRASS_DARK, 0.4, False)
     hole = f(0.0, h * 0.68)
@@ -284,7 +295,9 @@ def _front_lid(canvas: Canvas, mimic: Mimic, f: Frame, gap: float) -> None:
     )
     for x0, x1 in ((-w * 0.8, -w * 0.6), (w * 0.6, w * 0.8)):
         band = [f(x0, bottom), f(x1, bottom), f(x1, bottom + tall), f(x0, bottom + tall)]
-        canvas.poly(band, IRON, None, 0.3, False)
+        canvas.poly(
+            band, BRASS if getattr(mimic, "legendary", False) else IRON, None, 0.3, False
+        )
     hasp = [
         f(-1.6, bottom - 1.2),
         f(1.6, bottom - 1.2),
@@ -320,6 +333,7 @@ def _arch(a: float) -> float:
 def _draw_side(canvas: Canvas, mimic: Mimic, f: Frame) -> None:
     d = CHEST_DEPTH / 2
     h = BOX_HEIGHT
+    fitting = BRASS if getattr(mimic, "legendary", False) else IRON
     angle = _swing(mimic) * JAW_OPEN
     cos, sin = math.cos(angle), math.sin(angle)
 
@@ -333,8 +347,8 @@ def _draw_side(canvas: Canvas, mimic: Mimic, f: Frame) -> None:
     for z in (h * 0.36, h * 0.68):
         canvas.line([f(-d + 0.8, z), f(d - 0.8, z)], GRAIN, 0.3, False)
     for x0, x1 in ((-d * 0.8, -d * 0.55), (d * 0.55, d * 0.8)):
-        canvas.poly([f(x0, 0.0), f(x1, 0.0), f(x1, h), f(x0, h)], IRON, None, 0.3, False)
-    canvas.poly([f(-d, 0.0), f(d, 0.0), f(d, 0.9), f(-d, 0.9)], IRON, None, 0.3, False)
+        canvas.poly([f(x0, 0.0), f(x1, 0.0), f(x1, h), f(x0, h)], fitting, None, 0.3, False)
+    canvas.poly([f(-d, 0.0), f(d, 0.0), f(d, 0.9), f(-d, 0.9)], fitting, None, 0.3, False)
     canvas.ellipse(f(d - 0.9, 1.6), 0.6 * abs(f.scale) + 0.1, 0.6, BRASS, BRASS_DARK)
     canvas.ellipse(f(-d + 0.9, 1.6), 0.6 * abs(f.scale) + 0.1, 0.6, BRASS, BRASS_DARK)
     if angle > 0.2:
@@ -353,7 +367,7 @@ def _draw_side(canvas: Canvas, mimic: Mimic, f: Frame) -> None:
         (CHEST_DEPTH * 0.78, CHEST_DEPTH * 0.9),
     ):
         band = [lid(a0, 0.0), lid(a1, 0.0), lid(a1, _arch(a1)), lid(a0, _arch(a0))]
-        canvas.poly(band, IRON, None, 0.3, False)
+        canvas.poly(band, fitting, None, 0.3, False)
     canvas.line([lid(CHEST_DEPTH, 0.2), lid(CHEST_DEPTH, LID_HEIGHT)], BRASS, 0.9, False)
     awake = _awake(mimic)
     if awake > 0.0:
@@ -388,6 +402,7 @@ def _draw_legs(canvas: Canvas, legs, near: bool) -> None:
 # ----- the whole thing ------------------------------------------------------------------
 
 
+@chromatic_appearance
 def draw_mimic(painter: QPainter, mimic: Mimic, outline: QColor | None = None) -> None:
     up = mimic.up
     angle = math.degrees(math.atan2(up.x, -up.y))
@@ -435,6 +450,126 @@ def draw_mimic(painter: QPainter, mimic: Mimic, outline: QColor | None = None) -
         _draw_knife(painter, mimic.knife, outline)
     if mimic.chomp > 0.0:
         _draw_chomp(painter, mimic)
+    for shot in mimic.hoard_shots:
+        _draw_hoard_shot(painter, shot, outline)
+
+
+HOARD_DRAW_SCALE = 0.72
+"""Drawn size of spat weapons relative to a stickman's (big enough to read as loot)."""
+HOARD_SKULL_RADIUS = 5.8
+
+
+def _hoard_bow_strokes(unit: float) -> list[Stroke]:
+    """Ranger longbow geometry, grip at the origin, limbs along +y/−y."""
+    limb = Bow.limb * unit
+    s = unit
+    grip = Vec2(0.0, 0.0)
+    aim = Vec2(1.0, 0.0)
+    up = Vec2(0.0, -1.0)
+    tips = [grip + up * (side * limb) - aim * (3.0 * s) for side in (1, -1)]
+    bends = [grip + up * (side * 0.55 * limb) - aim * (0.6 * s) for side in (1, -1)]
+    string_mid = tips[0].lerp(tips[1], 0.5)
+    return [
+        Stroke(tips[0], bends[0], 1.5 * s, "wood"),
+        Stroke(bends[0], grip, 1.7 * s, "wood"),
+        Stroke(grip, bends[1], 1.7 * s, "wood"),
+        Stroke(bends[1], tips[1], 1.5 * s, "wood"),
+        Stroke(tips[0], string_mid, 0.5 * s, "string"),
+        Stroke(string_mid, tips[1], 0.5 * s, "string"),
+    ]
+
+
+def _hoard_axe_strokes(unit: float) -> list[Stroke]:
+    """Barbarian war axe geometry, grip at the origin, bit along +x."""
+    s = unit
+    haft = Axe.haft * unit
+    grip = Vec2(0.0, 0.0)
+    direction = Vec2(1.0, 0.0)
+    top = grip + direction * haft
+    leading = Vec2(0.0, -1.0)
+    socket = top - direction * (2.5 * s)
+    edge = []
+    for degrees in range(-75, 76, 15):
+        a = math.radians(degrees)
+        span = 7.5 if a < 0 else 5.0
+        edge.append(
+            socket
+            + leading * (3.0 * s + 5.0 * s * math.cos(a))
+            + direction * (span * s * math.sin(a))
+        )
+    bit = (
+        socket + leading * (0.8 * s) - direction * (1.8 * s),
+        socket + leading * (3.2 * s) - direction * (1.6 * s),
+        *edge,
+        socket + leading * (3.2 * s) + direction * (1.4 * s),
+        socket + leading * (0.8 * s) + direction * (1.6 * s),
+    )
+    return [
+        Stroke(grip - direction * (4.0 * s), top, 2.0 * s, "wood"),
+        Stroke(socket, socket, 0.6 * s, "steel", bit),
+        Stroke(socket, socket - leading * (3.5 * s), 1.6 * s, "steel"),
+        Stroke(socket - direction * (2.6 * s), socket + direction * (2.6 * s), 3.0 * s, "metal"),
+    ]
+
+
+def _draw_hoard_shot(painter: QPainter, shot, outline: QColor | None) -> None:
+    """Big weapons mixed with the old little coins, gems and knives."""
+    facing = 1 if shot.velocity.x >= 0.0 else -1
+    painter.save()
+    painter.translate(_qt(shot.position))
+    painter.rotate(math.degrees(shot.spin))
+    if shot.kind == HOARD_BOW:
+        _draw_hoard_strokes(painter, _hoard_bow_strokes(HOARD_DRAW_SCALE * Bow.size), outline)
+    elif shot.kind == HOARD_AXE:
+        _draw_hoard_strokes(painter, _hoard_axe_strokes(HOARD_DRAW_SCALE * Axe.size), outline)
+    elif shot.kind == HOARD_SKULL:
+        draw_skeleton_skull(
+            painter,
+            Vec2(0.0, 0.0),
+            HOARD_SKULL_RADIUS * HOARD_DRAW_SCALE,
+            facing,
+            outline=outline,
+        )
+    else:
+        _draw_hoard_trinket(painter, shot.kind, outline)
+    painter.restore()
+
+
+def _draw_hoard_trinket(painter: QPainter, kind: int, outline: QColor | None) -> None:
+    """The original small coin, knife or gem."""
+    if outline is not None:
+        painter.setPen(_pen(outline, 3.2))
+        painter.drawLine(_qt(Vec2(-2.8, 0.0)), _qt(Vec2(2.8, 0.0)))
+    if kind == HOARD_COIN:
+        painter.setPen(_pen(BRASS_DARK, 0.5))
+        painter.setBrush(GOLD)
+        painter.drawEllipse(QPointF(0.0, 0.0), 2.2, 1.0)
+    elif kind == HOARD_KNIFE:
+        painter.setPen(_pen(STEEL, 1.3))
+        painter.drawLine(_qt(Vec2(-3.5, 0.0)), _qt(Vec2(3.5, 0.0)))
+        painter.setPen(_pen(HILT, 1.0))
+        painter.drawLine(_qt(Vec2(-2.0, -1.2)), _qt(Vec2(-2.0, 1.2)))
+    elif kind == HOARD_GEM:
+        painter.setPen(_pen(BRASS_DARK, 0.5))
+        painter.setBrush(QColor(80, 220, 210))
+        painter.drawPolygon(
+            [_qt(Vec2(0.0, -2.2)), _qt(Vec2(2.0, 0.0)), _qt(Vec2(0.0, 2.2)), _qt(Vec2(-2.0, 0.0))]
+        )
+
+
+def _draw_hoard_strokes(
+    painter: QPainter, strokes: list[Stroke], outline: QColor | None
+) -> None:
+    if outline is not None:
+        for stroke in strokes:
+            painter.setPen(_pen(outline, stroke.width + 2.2))
+            if stroke.shape:
+                painter.setBrush(outline)
+                painter.drawPolygon([_qt(point) for point in stroke.shape])
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+            else:
+                painter.drawLine(_qt(stroke.start), _qt(stroke.end))
+    draw_strokes(painter, strokes)
 
 
 def _draw_shot_tongue(painter: QPainter, mimic: Mimic, outline: QColor | None) -> None:

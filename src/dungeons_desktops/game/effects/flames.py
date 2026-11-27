@@ -31,10 +31,15 @@ class Flame:
     velocity: Vec2
     age: float = 0.0
     size: float = 1.0
+    life: float = FLAME_LIFE
+    """How long this particle burns before it is spent."""
+    palette: str = ""
+    """Optional tint key for `draw_fire` (e.g. "blue", "green"); empty is orange."""
 
     @property
     def radius(self) -> float:
-        return (2.0 + 7.0 * self.age / FLAME_LIFE) * self.size
+        span = max(self.life, 1e-3)
+        return (2.0 + 7.0 * self.age / span) * self.size
 
 
 def emit(
@@ -49,6 +54,8 @@ def emit(
     carry: Vec2 = ZERO,
     spread: float = SPREAD,
     size: float = 1.0,
+    life: float = FLAME_LIFE,
+    palette: str = "",
 ) -> float:
     """Flames out of `mouth` along `aim` at `rate` a second; returns the fraction of a
     flame still due."""
@@ -57,7 +64,7 @@ def emit(
         due -= 1.0
         direction = aim.rotated(random.gauss(0.0, spread))
         velocity = direction * (speed * random.uniform(0.8, 1.1)) + carry
-        flames.append(Flame(mouth, velocity, size=size))
+        flames.append(Flame(mouth, velocity, size=size, life=life, palette=palette))
     return due
 
 
@@ -79,7 +86,7 @@ def step_flames(
         if skid and flame.position.y >= floor:
             flame.position = Vec2(flame.position.x, floor - 0.5)
             flame.velocity = Vec2(flame.velocity.x, -abs(flame.velocity.y) * 0.15)
-        if flame.age < FLAME_LIFE and flame.position.y < floor:
+        if flame.age < flame.life and flame.position.y < floor:
             alive.append(flame)
         else:
             spent.append(flame)

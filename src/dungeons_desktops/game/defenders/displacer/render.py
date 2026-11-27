@@ -33,6 +33,8 @@ from dungeons_desktops.game.defenders.displacer.actor import (
     Displacer,
     along,
 )
+from dungeons_desktops.game.defenders.legendary import LEGENDARY_GOLD
+from dungeons_desktops.render.chromatic import chromatic_appearance
 
 FUR = QColor(40, 42, 78)
 FUR_SHEEN = QColor(84, 92, 160)
@@ -52,9 +54,12 @@ GHOST_ALPHA = (0.07, 0.2)
 """The afterimage's opacity flickers between these..."""
 ILLUSION_ALPHA = (0.35, 0.55)
 """...its illusion's, sent out on its own..."""
+LEGENDARY_ILLUSION_ALPHA = (0.55, 0.85)
 FRENZY_ALPHA = (0.2, 0.5)
 """...and the afterimage's in a frenzy."""
+LEGENDARY_TRAIL_ALPHA = (0.18, 0.42)
 RIPPLE_RADIUS = 26.0
+WARP_VIOLET = QColor(168, 120, 255)
 
 TAIL_SEGMENTS = 14
 TAIL_SEGMENT = 2.5
@@ -406,6 +411,18 @@ GHOSTLY = Palette(
     EYE,
     None,
 )
+WARP = Palette(
+    WARP_VIOLET,
+    LEGENDARY_GOLD,
+    WARP_VIOLET.darker(150),
+    WARP_VIOLET.darker(120),
+    WARP_VIOLET.lighter(120),
+    WARP_VIOLET,
+    LEGENDARY_GOLD.lighter(120),
+    LEGENDARY_GOLD,
+    EYE.lighter(130),
+    QColor(214, 170, 92, 120),
+)
 
 
 @dataclass
@@ -507,31 +524,49 @@ def place(beast: Displacer, shape: Pose) -> Placed:
     return Placed(body, back, sheen, belly, head, head_yaw, parts)
 
 
+@chromatic_appearance
 def draw_displacer(painter: QPainter, beast: Displacer, outline: QColor | None = None) -> None:
     """The beast, with its displacement afterimage behind it while it lives (or, sent
     out on its own, its illusion)."""
-    if beast.ghost is not None:
-        _draw_illusion(painter, beast.ghost)
+    legendary = getattr(beast, "legendary", False)
+    for decoy in getattr(beast, "ghosts", None) or ():
+        _draw_illusion(painter, decoy, hot=legendary)
+    if not getattr(beast, "ghosts", None):
+        if beast.ghost is not None:
+            _draw_illusion(painter, beast.ghost, hot=legendary)
+        if beast.ghost2 is not None:
+            _draw_illusion(painter, beast.ghost2, hot=legendary)
     placed = place(beast, pose(beast))
     opacity = painter.opacity()
-    away = beast.ghost.presence if beast.ghost is not None else 0.0
+    lead = beast.ghosts[0] if getattr(beast, "ghosts", None) else beast.ghost
+    away = lead.presence if lead is not None else 0.0
     if not beast.dead and away < 1.0:
         t, fury = beast.time, beast.fury
         shift = Vec2(
             6.0 * math.sin(0.45 * t) + 2.5 * math.sin(1.7 * t + 1.0), -1.5 + 1.5 * math.sin(1.3 * t)
         )
         shift += Vec2(7.0 * math.sin(9.0 * t), 2.5 * math.sin(13.0 * t)) * fury
+        if legendary:
+            shift *= 1.85
         _, up = beast.spine().frame(0.0)
         offset = along(up) * (shift.x * beast.turn) - up * shift.y
-        low, high = GHOST_ALPHA
+        low, high = LEGENDARY_TRAIL_ALPHA if legendary else GHOST_ALPHA
         low, high = low + (FRENZY_ALPHA[0] - low) * fury, high + (FRENZY_ALPHA[1] - high) * fury
         flicker = _flicker(t) + (_flicker(2.7 * t) - _flicker(t)) * fury
-        painter.save()
-        painter.translate(_qt(offset))
-        painter.setOpacity(opacity * (low + (high - low) * flicker) * (1.0 - away))
-        _paint(painter, placed, GHOSTLY, None)
-        painter.restore()
-    _paint(painter, placed, DEAD if beast.dead else LIVE, outline)
+        trails = (1.0, 1.7, 2.5, 3.4, 4.4) if legendary else (1.0,)
+        for index, distance in enumerate(trails):
+            painter.save()
+            painter.translate(_qt(offset * distance))
+            painter.setOpacity(
+                opacity
+                * (low + (high - low) * flicker)
+                * (1.0 - away)
+                * (1.0 - 0.16 * index)
+            )
+            _paint(painter, placed, GHOSTLY if not legendary else WARP, None)
+            painter.restore()
+    rim = LEGENDARY_GOLD if legendary and outline is None and not beast.dead else outline
+    _paint(painter, placed, DEAD if beast.dead else LIVE, rim)
     if beast.attack is not None and not beast.dead:
         _paint_streak(painter, beast)
 
@@ -598,7 +633,7 @@ def _flicker(t: float) -> float:
     return 0.5 + 0.5 * math.sin(17.0 * t) * math.sin(5.3 * t + 1.0)
 
 
-def _draw_illusion(painter: QPainter, ghost: Displacer) -> None:
+def _draw_illusion(painter: QPainter, ghost: Displacer, hot: bool = False) -> None:
     """The illusion: a flickering see-through second beast that shimmers apart when an
     attack passes through it."""
     presence = ghost.presence
@@ -606,24 +641,26 @@ def _draw_illusion(painter: QPainter, ghost: Displacer) -> None:
         return
     placed = place(ghost, pose(ghost))
     opacity = painter.opacity()
-    low, high = ILLUSION_ALPHA
+    low, high = LEGENDARY_ILLUSION_ALPHA if hot else ILLUSION_ALPHA
     alpha = opacity * presence * (low + (high - low) * _flicker(ghost.time))
     shimmer = ghost.shimmer
+    palette = WARP if hot else GHOSTLY
     _, up = ghost.spine().frame(0.0)
     way = along(up)
     painter.save()
-    if shimmer > 0.0:
-        split = 4.0 * shimmer * (0.6 + 0.4 * math.sin(40.0 * ghost.time))
+    if shimmer > 0.0 or hot:
+        split = (7.0 if hot else 4.0) * max(shimmer, 0.35 if hot else 0.0)
+        split *= 0.6 + 0.4 * math.sin(40.0 * ghost.time)
         for side in (-1.0, 1.0):
             painter.save()
             painter.translate(_qt(way * (side * split)))
-            painter.setOpacity(alpha * 0.55)
-            _paint(painter, placed, GHOSTLY, None)
+            painter.setOpacity(alpha * (0.7 if hot else 0.55))
+            _paint(painter, placed, palette, LEGENDARY_GOLD if hot else None)
             painter.restore()
         painter.setOpacity(alpha * (1.0 - 0.6 * shimmer))
     else:
         painter.setOpacity(alpha)
-    _paint(painter, placed, GHOSTLY, None)
+    _paint(painter, placed, palette, LEGENDARY_GOLD if hot else None)
     if shimmer > 0.0:
         center = ghost.look_center + ghost.shimmer_at
         radius = RIPPLE_RADIUS * (1.0 - shimmer) + 3.0

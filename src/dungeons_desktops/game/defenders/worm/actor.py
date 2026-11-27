@@ -24,6 +24,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Rect, Vec2, clamp, wrap_angle
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers.actor import WORM_DAMAGE
 from dungeons_desktops.navigation.terrain import TerrainChange
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from dungeons_desktops.game.world.simulation import SimWorld
 
 WORM_HP = 4
+DEVOURER_HP = 20
+"""Legendary worm (Devourer) hit points."""
 
 GRAVITY = 900.0
 SEGMENTS = 22
@@ -93,6 +96,7 @@ class Worm(Mortal):
         self.catches = 0
         self.size = 1.0
         """Thickness multiplier; grows with every meal."""
+        self.legendary = False
         self._out_time = 0.0
         self._left_ground = False
         self._leap_time = 0.0
@@ -109,11 +113,13 @@ class Worm(Mortal):
 
     def grow(self) -> None:
         """A meal: a little thicker and a couple of segments longer, up to a limit."""
-        self.size = min(MAX_SIZE, self.size + GROWTH_PER_MEAL)
-        for _ in range(min(SEGMENTS_PER_MEAL, MAX_SEGMENTS - len(self.points))):
-            tail, before = self.points[-1], self.points[-2]
-            direction = (tail - before).normalized()
-            self.points.append(tail + direction * SPACING)
+        meals = 2 if getattr(self, "legendary", False) else 1
+        for _ in range(meals):
+            self.size = min(MAX_SIZE, self.size + GROWTH_PER_MEAL)
+            for _ in range(min(SEGMENTS_PER_MEAL, MAX_SEGMENTS - len(self.points))):
+                tail, before = self.points[-1], self.points[-2]
+                direction = (tail - before).normalized()
+                self.points.append(tail + direction * SPACING)
 
     # ----- ground --------------------------------------------------------------
 
@@ -185,7 +191,7 @@ class Worm(Mortal):
         alive = [
             s for s in self.world.stickmen if s.prey and s.center().distance_to(head) <= HUNT_RANGE
         ]
-        return min(alive, key=lambda s: s.center().distance_to(head), default=None)
+        return min(priority_prey(alive), key=lambda s: s.center().distance_to(head), default=None)
 
     def _burrow(self, dt: float) -> None:
         head = self.head
@@ -356,9 +362,13 @@ class Worm(Mortal):
         for stickman in self.world.stickmen:
             if stickman.prey and stickman.hits(head, margin=CATCH_MARGIN * self.size):
                 fling = self.velocity.normalized() * CATCH_SPEED + Vec2(0.0, -120.0)
-                if not stickman.hurt_from(
-                    self, WORM_DAMAGE, head, fling, "worm", "Eaten by the worm!", bleed=False
-                ):
+                damage = WORM_DAMAGE * (2 if getattr(self, "legendary", False) else 1)
+                eaten = (
+                    "Eaten by the Devourer!"
+                    if getattr(self, "legendary", False)
+                    else "Eaten by the worm!"
+                )
+                if not stickman.hurt_from(self, damage, head, fling, "worm", eaten, bleed=False):
                     continue
                 self._bite_off(stickman, fling)
                 self.chomp = 0.35

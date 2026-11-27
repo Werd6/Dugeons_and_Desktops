@@ -19,6 +19,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from dungeons_desktops.core.geometry import Vec2, clamp, smoothstep
+from dungeons_desktops.game.actors.hunting import priority_prey
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers.actor import DRAGON_DAMAGE
 from dungeons_desktops.game.effects.breath import (
@@ -28,7 +29,14 @@ from dungeons_desktops.game.effects.breath import (
     splash,
     step_motes,
 )
-from dungeons_desktops.game.effects.flames import Flame, burn_hits, emit, step_flames
+from dungeons_desktops.game.effects.flames import (
+    FLAME_DRAG,
+    FLAME_LIFE,
+    Flame,
+    burn_hits,
+    emit,
+    step_flames,
+)
 from dungeons_desktops.navigation.terrain import Surface, TerrainChange
 from dungeons_desktops.rig.ik import two_bone_points
 from dungeons_desktops.rig.locomotion import PoseMode
@@ -88,7 +96,6 @@ FIRE_BURST = 1.1
 FIRE_COOLDOWN = 1.2
 FLAME_RATE = 70.0
 FLAME_SPEED = 330.0
-FLAME_LIFE = 0.7
 STRAFE_HEIGHT = 75.0
 """How far above its prey the dragon swoops while strafing."""
 WALL_STRAFE_HEIGHT = 20.0
@@ -104,6 +111,20 @@ FALL_GRAVITY = 600.0
 LYING_HEIGHT = 7.0 * SCALE
 """Body height above the ground once it's down."""
 ZERO = Vec2(0.0, 0.0)
+ANCIENT_SIZE = 1.9
+CATACLYSM_DAMAGE = 12
+ANCIENT_MELEE_DAMAGE = 14
+ANCIENT_HP = 2.2
+"""Legendary HP multiplier on top of the shared legendary floor (strongest defender)."""
+CATACLYSM_RANGE = 4.8
+"""How much farther Cataclysm Breath reaches than a normal fire cone."""
+CATACLYSM_BURST = 2.35
+CATACLYSM_RATE = 2.8
+CATACLYSM_SPEED = 2.55
+CATACLYSM_LIFE = 1.45
+CATACLYSM_DRAG = 0.55
+ANCIENT_BULK = 1.38
+"""Body and leg thickness for the Ancient Wyrm silhouette."""
 
 
 class DragonMode(Enum):
@@ -151,11 +172,15 @@ class Dragon(Mortal):
     of its breath and how its victims die. Every colour fights exactly the same."""
     wisps: list[Mote] = field(default_factory=list)
     """What its breath leaves behind (lingering gas, frost, acid drips): just for show."""
+    size: float = 1.0
+    """Instance size; movement speeds and AI timing remain unchanged."""
     max_hp = DRAGON_HP
     linger = 4.0
 
     def __post_init__(self) -> None:
         rng = self.world.random
+        self.legendary = getattr(self, "legendary", False)
+        self._legendary_scaled = False
         self.angle = 0.0 if self.facing > 0 else math.pi
         self.support: Surface | None = None
         self.x = self.body.x
@@ -192,7 +217,9 @@ class Dragon(Mortal):
         ]
         hip = self.hip
         back = -self.forward
-        self.tail = [hip + back * (TAIL_SPACING * (i + 1)) for i in range(TAIL_SEGMENTS)]
+        self.tail = [
+            hip + back * ((TAIL_SPACING * self.size) * (i + 1)) for i in range(TAIL_SEGMENTS)
+        ]
         self._pose(1.0 / 60.0, snap=True)
 
     # ----- frame ---------------------------------------------------------------
@@ -211,19 +238,19 @@ class Dragon(Mortal):
 
     @property
     def shoulder(self) -> Vec2:
-        return self.body + self.forward * (BODY_LENGTH / 2)
+        return self.body + self.forward * ((BODY_LENGTH * self.size) / 2)
 
     @property
     def hip(self) -> Vec2:
-        return self.body - self.forward * (BODY_LENGTH / 2)
+        return self.body - self.forward * ((BODY_LENGTH * self.size) / 2)
 
     @property
     def neck_base(self) -> Vec2:
-        return self.shoulder + self.local(Vec2(2.0, -3.0) * SCALE)
+        return self.shoulder + self.local(Vec2(2.0, -3.0) * (SCALE * self.size))
 
     @property
     def mouth(self) -> Vec2:
-        return self.head + Vec2.from_angle(self.head_angle, 9.0 * SCALE)
+        return self.head + Vec2.from_angle(self.head_angle, 9.0 * (SCALE * self.size))
 
     @property
     def flying(self) -> bool:
@@ -236,6 +263,7 @@ class Dragon(Mortal):
     # ----- simulation ----------------------------------------------------------
 
     def update(self, dt: float) -> None:
+        self._apply_legendary_size()
         self.clock += dt
         self.mode_time += dt
         self.swipe_cooldown -= dt
@@ -253,6 +281,22 @@ class Dragon(Mortal):
         self._pose(dt)
         self._update_flames(dt)
 
+    def _apply_legendary_size(self) -> None:
+        """Legendary status is applied by spawning after construction."""
+        if self._legendary_scaled or not getattr(self, "legendary", False):
+            return
+        self._legendary_scaled = True
+        self.size *= ANCIENT_SIZE
+        floor = type(self).max_hp
+        self.max_hp = max(self.max_hp, max(1, int(round(floor * ANCIENT_HP))))
+        self.damage = 0
+        hip = self.hip
+        self.tail = [
+            hip - self.forward * ((TAIL_SPACING * self.size) * (i + 1))
+            for i in range(TAIL_SEGMENTS)
+        ]
+        self._pose(1.0 / 60.0, snap=True)
+
     def _set_mode(self, mode: DragonMode) -> None:
         self.mode = mode
         self.mode_time = 0.0
@@ -262,7 +306,7 @@ class Dragon(Mortal):
     def _range(self) -> tuple[float, float]:
         surface = self.support
         assert surface is not None
-        margin = BODY_LENGTH / 2 + 6.0 * SCALE
+        margin = (BODY_LENGTH * self.size) / 2 + 6.0 * (SCALE * self.size)
         low, high = surface.low + margin, surface.high - margin
         if low > high:
             low = high = (surface.low + surface.high) / 2
@@ -278,7 +322,7 @@ class Dragon(Mortal):
         )
 
     def _claw_point(self) -> Vec2:
-        return self.shoulder + self.local(Vec2(21.0, 10.5) * SCALE)
+        return self.shoulder + self.local(Vec2(21.0, 10.5) * (SCALE * self.size))
 
     def _within_claws(self, stickman: Stickman, slack: float = 0.0) -> bool:
         """In front of its chest within claw reach, or anywhere under or against its
@@ -289,17 +333,18 @@ class Dragon(Mortal):
         if (
             ahead
             and center.distance_to(claw) < 30.0 + slack
-            and stickman.hits(claw, SWIPE_REACH + slack)
+            and stickman.hits(claw, (SWIPE_REACH * self.size) + slack)
         ):
             return True
-        belly = self.local(Vec2(0.0, BELLY_DROP))
+        belly = self.local(Vec2(0.0, (BELLY_DROP * self.size)))
         return any(
-            stickman.hits(point + belly, BODY_REACH + slack)
+            stickman.hits(point + belly, (BODY_REACH * self.size) + slack)
             for point in (self.hip, self.body, self.shoulder)
         )
 
     def _in_reach(self) -> Stickman | None:
-        return next((s for s in self.world.stickmen if s.prey and self._within_claws(s)), None)
+        prey = priority_prey([s for s in self.world.stickmen if s.prey and self._within_claws(s)])
+        return next(iter(prey), None)
 
     def _walk(self, dt: float) -> None:
         if self.support is None:
@@ -316,7 +361,7 @@ class Dragon(Mortal):
             return
 
         prey = [s for s in self.world.stickmen if s.prey and self._on_support(s)]
-        target = min(prey, key=lambda s: abs(s.contact().x - self.x), default=None)
+        target = min(priority_prey(prey), key=lambda s: abs(s.contact().x - self.x), default=None)
         if target is not None:
             goal, top_speed = target.contact().x, CHARGE_SPEED
             self.wander_x = None
@@ -343,7 +388,7 @@ class Dragon(Mortal):
             self.x = clamp(self.x, low, high)
             self.speed = 0.0
             self.wander_x = None
-        self.phase += abs(self.speed) * dt / STRIDE
+        self.phase += abs(self.speed) * dt / (STRIDE * self.size)
         moving = min(1.0, abs(self.speed) / (WALK_SPEED * 0.4))
         self.gait += (moving - self.gait) * min(1.0, 6.0 * dt)
 
@@ -362,7 +407,19 @@ class Dragon(Mortal):
             for stickman in self.world.stickmen:
                 if stickman.prey and self._within_claws(stickman, slack=4.0):
                     push = self.forward * SWIPE_PUSH + self.up * 180.0
-                    self._hit(stickman, push, "Mauled by the dragon!")
+                    damage = (
+                        ANCIENT_MELEE_DAMAGE
+                        if getattr(self, "legendary", False)
+                        else DRAGON_DAMAGE
+                    )
+                    self._hit(
+                        stickman,
+                        push,
+                        "Torn apart by the Ancient Wyrm!"
+                        if getattr(self, "legendary", False)
+                        else "Mauled by the dragon!",
+                        damage=damage,
+                    )
         if self.mode_time >= SWIPE_TIME:
             self._set_mode(DragonMode.WALK)
             self.swipe_cooldown = SWIPE_COOLDOWN
@@ -377,13 +434,17 @@ class Dragon(Mortal):
         self.flight_timer = rng.uniform(*FLIGHT_TIME)
         self.cruise_y = self._top + rng.uniform(*CRUISE_DEPTH)
         self.fire_cooldown = 0.6
-        self.world.debris.burst(self.body + Vec2(0, HIP_HEIGHT), Vec2(0, -1), 10, 140.0, 1.4)
+        self.world.debris.burst(
+            self.body + Vec2(0, (HIP_HEIGHT * self.size)), Vec2(0, -1), 10, 140.0, 1.4
+        )
 
     def _spot_prey(self) -> Stickman | None:
         """The nearest stickman in any direction, high or low, or a climber whose wall it
         can make a run at from the wall's open side."""
         spotted = [s for s in self._targets() if s.center().distance_to(self.body) < SPOT_RANGE]
-        return min(spotted, key=lambda s: s.center().distance_to(self.body), default=None)
+        return min(
+            priority_prey(spotted), key=lambda s: s.center().distance_to(self.body), default=None,
+        )
 
     def _targets(self) -> list[Stickman]:
         return [
@@ -399,9 +460,11 @@ class Dragon(Mortal):
         ahead = [
             s
             for s in self._targets()
-            if self._ahead(s) and s.center().distance_to(mouth) < FIRE_RANGE
+            if self._ahead(s)
+            and s.center().distance_to(mouth)
+            < FIRE_RANGE * (CATACLYSM_RANGE if getattr(self, "legendary", False) else 1.0)
         ]
-        return min(ahead, key=lambda s: s.center().distance_to(mouth), default=None)
+        return min(priority_prey(ahead), key=lambda s: s.center().distance_to(mouth), default=None)
 
     def _come_about(self, prey: Stickman) -> None:
         """Wheel round in the air for prey left behind, once it is far enough back that
@@ -469,8 +532,9 @@ class Dragon(Mortal):
                 self._breathe(dt, target.center())
         elif self.fire_cooldown <= 0.0 and (target := self._in_fire_range()) is not None:
             self.fire_target = target
-            self.fire_time = FIRE_BURST
-            self.fire_cooldown = FIRE_COOLDOWN + FIRE_BURST
+            burst = FIRE_BURST * (CATACLYSM_BURST if getattr(self, "legendary", False) else 1.0)
+            self.fire_time = burst
+            self.fire_cooldown = FIRE_COOLDOWN + burst
         if self.flight_timer <= 0.0 and self.fire_time <= 0.0:
             self._start_landing()
 
@@ -488,7 +552,11 @@ class Dragon(Mortal):
             x = clamp(x, world.left + 10.0, world.width - 10.0)
         flap = self.flap + dt * (11.0 if self.velocity.y < -40.0 else 7.0)
         y += FLAP_BOB * (math.cos(flap) - math.cos(self.flap))
-        y = clamp(y, self._top + 12.0, world.floor_y - HIP_HEIGHT + 2.0 * SCALE)
+        y = clamp(
+            y,
+            self._top + 12.0,
+            world.floor_y - (HIP_HEIGHT * self.size) + 2.0 * (SCALE * self.size),
+        )
         self.body = Vec2(x, y)
         self.flap = flap
         braking = self.facing * self.velocity.x < 0.0
@@ -516,28 +584,35 @@ class Dragon(Mortal):
     def _breathe(self, dt: float, target: Vec2) -> None:
         mouth = self.mouth
         aim = (target - mouth).normalized()
+        ancient = getattr(self, "legendary", False)
         self._flame_due = emit(
             self.flames,
             self._flame_due,
-            FLAME_RATE,
+            FLAME_RATE * (CATACLYSM_RATE if ancient else 1.0),
             dt,
             mouth,
             aim,
-            FLAME_SPEED,
+            FLAME_SPEED * (CATACLYSM_SPEED if ancient else 1.0),
             self.world.random,
             self.velocity * 0.2,
+            # Keep the stream relatively tight so it reads as a long jet, not a fan.
+            spread=0.07 if ancient else 0.12,
+            size=2.0 if ancient else 1.0,
+            life=CATACLYSM_LIFE if ancient else FLAME_LIFE,
         )
 
     def _start_landing(self) -> None:
         rng = self.world.random
         spots = [
-            s for s in self.world.goblin_planner.surfaces if s.walkable and s.length >= MIN_LANDING
+            s
+            for s in self.world.goblin_planner.surfaces
+            if s.walkable and s.length >= (MIN_LANDING * self.size)
         ]
         if not spots:
             self.flight_timer = 2.0
             return
         surface = rng.choices(spots, weights=[s.length for s in spots])[0]
-        margin = BODY_LENGTH / 2 + 8.0
+        margin = (BODY_LENGTH * self.size) / 2 + 8.0
         x = rng.uniform(surface.low + margin, surface.high - margin)
         self.landing = Vec2(x, surface.start.y)
         self._set_mode(DragonMode.LAND)
@@ -547,7 +622,7 @@ class Dragon(Mortal):
         if landing is None:
             self._start_landing()
             return
-        goal = landing - Vec2(0.0, HIP_HEIGHT - 2.0 * SCALE)
+        goal = landing - Vec2(0.0, (HIP_HEIGHT * self.size) - 2.0 * (SCALE * self.size))
         to_goal = goal - self.body
         distance = to_goal.length()
         if distance < 4.0:
@@ -585,14 +660,16 @@ class Dragon(Mortal):
         if not self.flames:
             return
         floor = self.world.floor_y
-        self.flames, spent = step_flames(self.flames, dt, floor)
+        drag = CATACLYSM_DRAG if getattr(self, "legendary", False) else FLAME_DRAG
+        self.flames, spent = step_flames(self.flames, dt, floor, drag_rate=drag)
         if self.variant != "red":
             for flame in spent:
                 self._leave_wisp(flame, floor)
         for stickman, flame in burn_hits(self.flames, self.world.stickmen):
             push = flame.velocity.normalized() * 200.0 + Vec2(0.0, -120.0)
             death = DEATH_MESSAGES[self.variant]
-            if self._hit(stickman, push, death, bleed=False):
+            damage = CATACLYSM_DAMAGE if getattr(self, "legendary", False) else DRAGON_DAMAGE
+            if self._hit(stickman, push, death, bleed=False, damage=damage):
                 stickman.succumb(BREATHS[self.variant])
 
     def _leave_wisp(self, flame: Flame, floor: float) -> None:
@@ -635,7 +712,7 @@ class Dragon(Mortal):
         self.down_time += dt
         self.mode_time += dt
         ground = self._ground_below(self.body)
-        rest = ground - LYING_HEIGHT
+        rest = ground - (LYING_HEIGHT * self.size)
         base = 0.0 if self.facing > 0 else math.pi
         down = self.body.y >= rest - 0.5 and self.velocity.y >= 0.0
         if down:
@@ -672,39 +749,48 @@ class Dragon(Mortal):
             root = (self.shoulder if leg.front else self.hip) + self.local(Vec2(0.0, 2.0))
             out = (1.0 if leg.front else -1.0) * self.facing
             if down:
-                target = Vec2(root.x + out * 14.0 * SCALE, ground)
+                target = Vec2(root.x + out * 14.0 * (SCALE * self.size), ground)
             else:
-                target = root + Vec2(out * 5.0, 18.0) * SCALE
+                target = root + Vec2(out * 5.0, 18.0) * (SCALE * self.size)
             bend = -self.facing if leg.front else self.facing
             foot = leg.foot.lerp(target, rate)
-            leg.root, leg.knee, leg.foot = two_bone_points(root, UPPER_LEG, LOWER_LEG, foot, bend)
-        head = self.neck_base + Vec2(self.facing * 16.0, 14.0) * SCALE
-        head = Vec2(head.x, min(head.y, ground - 4.0 * SCALE))
+            leg.root, leg.knee, leg.foot = two_bone_points(
+                root, (UPPER_LEG * self.size), (LOWER_LEG * self.size), foot, bend
+            )
+        head = self.neck_base + Vec2(self.facing * 16.0, 14.0) * (SCALE * self.size)
+        head = Vec2(head.x, min(head.y, ground - 4.0 * (SCALE * self.size)))
         self.head = self.head.lerp(head, min(1.0, dt * 6.0))
         snout = (0.0 if self.facing > 0 else math.pi) + self.facing * 0.5
         self.head_angle += math.remainder(snout - self.head_angle, math.tau) * min(1.0, dt * 6.0)
         self.jaw += (0.35 - self.jaw) * min(1.0, dt * 6.0)
         tail = self.tail
-        tail[0] = self.hip - self.forward * (2.0 * SCALE)
+        tail[0] = self.hip - self.forward * (2.0 * (SCALE * self.size))
         relax = min(1.0, dt * 5.0)
         for i in range(1, len(tail)):
             if down:
-                x = tail[0].x - self.facing * TAIL_SPACING * i * 0.95
-                rest = Vec2(x, self._ground_below(Vec2(x, tail[0].y)) - 1.5 * SCALE)
+                x = tail[0].x - self.facing * (TAIL_SPACING * self.size) * i * 0.95
+                rest = Vec2(x, self._ground_below(Vec2(x, tail[0].y)) - 1.5 * (SCALE * self.size))
             else:
-                rest = tail[0] + self.local(Vec2(-TAIL_SPACING * i, 0.0))
+                rest = tail[0] + self.local(Vec2(-(TAIL_SPACING * self.size) * i, 0.0))
             pulled = tail[i].lerp(rest, relax)
-            floor = self._ground_below(pulled) - 1.5 * SCALE
+            floor = self._ground_below(pulled) - 1.5 * (SCALE * self.size)
             pulled = Vec2(pulled.x, min(pulled.y, floor))
             offset = pulled - tail[i - 1]
             length = offset.length()
             if length > 1e-6:
-                tail[i] = tail[i - 1] + offset * (TAIL_SPACING / length)
+                tail[i] = tail[i - 1] + offset * ((TAIL_SPACING * self.size) / length)
 
-    def _hit(self, stickman: Stickman, push: Vec2, death: str, bleed: bool = True) -> bool:
+    def _hit(
+        self,
+        stickman: Stickman,
+        push: Vec2,
+        death: str,
+        bleed: bool = True,
+        damage: int = DRAGON_DAMAGE,
+    ) -> bool:
         """`DRAGON_DAMAGE` to `stickman`; True if it killed him."""
         killed = stickman.hurt_from(
-            self, DRAGON_DAMAGE, stickman.center(), push, "dragon", death, bleed
+            self, damage, stickman.center(), push, "dragon", death, bleed
         )
         self.catches += killed
         return killed
@@ -756,10 +842,13 @@ class Dragon(Mortal):
             base = 0.0 if self.facing > 0 else math.pi
             self.angle = base - self.facing * 0.18 * rear
             bob = math.sin(self.phase * math.tau * 2.0) * 1.0 * self.gait
-            hip = Vec2(self.x - self.facing * BODY_LENGTH / 2, ground - HIP_HEIGHT + bob)
-            self.body = hip + self.forward * (BODY_LENGTH / 2)
+            hip = Vec2(
+                self.x - self.facing * (BODY_LENGTH * self.size) / 2,
+                ground - (HIP_HEIGHT * self.size) + bob,
+            )
+            self.body = hip + self.forward * ((BODY_LENGTH * self.size) / 2)
         else:
-            ground = self.body.y + HIP_HEIGHT
+            ground = self.body.y + (HIP_HEIGHT * self.size)
 
         blend = 1.0 if snap else min(1.0, dt * 14.0)
         settled = snap or self.mode_time >= LAND_BLEND
@@ -773,12 +862,14 @@ class Dragon(Mortal):
                     target = self._swipe_foot(root, ground)
                 foot = target if settled else leg.foot.lerp(target, blend)
             else:
-                tuck = self.local(Vec2(-9.0, 11.5) * SCALE)
+                tuck = self.local(Vec2(-9.0, 11.5) * (SCALE * self.size))
                 foot = leg.foot.lerp(root + tuck, blend)
             bend = -self.facing if leg.front else self.facing
-            leg.root, leg.knee, leg.foot = two_bone_points(root, UPPER_LEG, LOWER_LEG, foot, bend)
+            leg.root, leg.knee, leg.foot = two_bone_points(
+                root, (UPPER_LEG * self.size), (LOWER_LEG * self.size), foot, bend
+            )
             if walking:
-                leg.lift = clamp((ground - leg.foot.y) / (3.5 * SCALE), 0.0, 1.0)
+                leg.lift = clamp((ground - leg.foot.y) / (3.5 * (SCALE * self.size)), 0.0, 1.0)
             else:
                 leg.lift += (1.0 - leg.lift) * (1.0 if snap else min(1.0, dt * 8.0))
 
@@ -789,19 +880,25 @@ class Dragon(Mortal):
 
     def _planted_foot(self, leg: Leg, root: Vec2, ground: float) -> Vec2:
         p = (self.phase + leg.phase_offset) % 1.0
-        span = STANCE * STRIDE
+        span = STANCE * (STRIDE * self.size)
         if p < STANCE:
             along, lift = span * (0.5 - p / STANCE), 0.0
         else:
             u = (p - STANCE) / (1.0 - STANCE)
-            along, lift = span * (-0.5 + smoothstep(u)), math.sin(math.pi * u) * STEP_HEIGHT
-        x = root.x + self.facing * (1.5 * SCALE + along * self.gait)
+            along, lift = (
+                span * (-0.5 + smoothstep(u)),
+                math.sin(math.pi * u) * (STEP_HEIGHT * self.size),
+            )
+        x = root.x + self.facing * (1.5 * (SCALE * self.size) + along * self.gait)
         return Vec2(x, ground - lift * self.gait)
 
     def _swipe_foot(self, root: Vec2, ground: float) -> Vec2:
         u = min(1.0, self.mode_time / SWIPE_TIME)
         rest = Vec2(1.5, ground - root.y)
-        raised, struck = Vec2(13.0, -8.0) * SCALE, Vec2(28.5, 11.5) * SCALE
+        raised, struck = (
+            Vec2(13.0, -8.0) * (SCALE * self.size),
+            Vec2(28.5, 11.5) * (SCALE * self.size),
+        )
         if u < 0.45:
             point = rest.lerp(raised, smoothstep(u / 0.45))
         elif u < 0.6:
@@ -812,18 +909,18 @@ class Dragon(Mortal):
 
     def _pose_head(self, dt: float, snap: bool) -> None:
         swiping = self.mode is DragonMode.SWIPE
-        reach = NECK
+        reach = NECK * self.size
         if self.flying:
-            reach = Vec2(30.0, -9.0) * SCALE
+            reach = Vec2(30.0, -9.0) * (SCALE * self.size)
         if swiping:
             u = min(1.0, self.mode_time / SWIPE_TIME)
-            reach = reach.lerp(Vec2(26.0, -5.0) * SCALE, math.sin(math.pi * u))
+            reach = reach.lerp(Vec2(26.0, -5.0) * (SCALE * self.size), math.sin(math.pi * u))
         bob = math.sin(self.phase * math.tau * 2.0 + 0.8) * 0.8 * self.gait
         head = self.shoulder + self.local(reach + Vec2(0.0, bob))
         heading = self.angle + self.facing * 0.25
         if self.fire_time > 0.0 and self.fire_target is not None:
             aim = (self.fire_target.center() - self.neck_base).normalized()
-            head = self.neck_base + aim * (NECK.length() * 1.05)
+            head = self.neck_base + aim * ((NECK * self.size).length() * 1.05)
             heading = aim.angle()
         rate = 1.0 if snap else min(1.0, dt * 12.0)
         self.head = self.head.lerp(head, rate)
@@ -835,15 +932,18 @@ class Dragon(Mortal):
         at the tip, swaying), then the chain is pulled back to its segment spacing."""
         tail = self.tail
         count = len(tail)
-        tail[0] = self.hip - self.forward * (2.0 * SCALE)
+        tail[0] = self.hip - self.forward * (2.0 * (SCALE * self.size))
         relax = min(1.0, (2.5 if self.flying else 5.0) * dt)
         for i in range(1, count):
             t = i / (count - 1)
-            sway = math.sin(self.mode_time * 2.2 - i * 0.5) * 2.5 * SCALE * t
-            drop = 4.0 * SCALE * math.sin(math.pi * t) - 9.0 * SCALE * t * t
-            rest = tail[0] + self.local(Vec2(-TAIL_SPACING * i, drop + sway))
+            sway = math.sin(self.mode_time * 2.2 - i * 0.5) * 2.5 * (SCALE * self.size) * t
+            drop = (
+                4.0 * (SCALE * self.size) * math.sin(math.pi * t)
+                - 9.0 * (SCALE * self.size) * t * t
+            )
+            rest = tail[0] + self.local(Vec2(-(TAIL_SPACING * self.size) * i, drop + sway))
             pulled = tail[i].lerp(rest, relax)
             offset = pulled - tail[i - 1]
             length = offset.length()
             if length > 1e-6:
-                tail[i] = tail[i - 1] + offset * (TAIL_SPACING / length)
+                tail[i] = tail[i - 1] + offset * ((TAIL_SPACING * self.size) / length)

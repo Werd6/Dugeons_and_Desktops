@@ -8,13 +8,41 @@ from collections.abc import Callable, Collection, Iterable
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath
 
-from dungeons_desktops.core.geometry import Vec2, clamp
+from dungeons_desktops.core.geometry import Vec2
 from dungeons_desktops.game.actors.base import Actor
 from dungeons_desktops.game.adventurers.actor import Stickman
 from dungeons_desktops.game.adventurers.spells import VINE_GROW, VINE_TIME, Spells
+from dungeons_desktops.game.defenders.goblins.appearance import (
+    GOBLIN_FAR,
+    GOBLIN_HEAD,
+    GOBLIN_SKIN,
+)
 from dungeons_desktops.game.defenders.mimic.render import draw_lure_alert
 from dungeons_desktops.game.defenders.mindflayer.render import FLAYER_SKIN, FLAYER_SKIN_FAR
 from dungeons_desktops.game.effects.render import demise_colors
+from dungeons_desktops.game.heroes.hero_alchemist import render as hero_alchemist
+from dungeons_desktops.game.heroes.hero_cleric import render as hero_cleric
+from dungeons_desktops.game.heroes.hero_fighter import render as hero_fighter
+from dungeons_desktops.game.heroes.hero_sorcerer import render as hero_sorcerer
+from dungeons_desktops.game.heroes.natures_wrath.bear_render import draw_bear
+from dungeons_desktops.game.heroes.natures_wrath.dragon_render import draw_magma_dragon
+from dungeons_desktops.game.heroes.natures_wrath.render import (
+    BODY_WIDTH as NATURES_WRATH_BODY_WIDTH,
+)
+from dungeons_desktops.game.heroes.natures_wrath.render import (
+    draw_nature_aura,
+    draw_natures_wrath_cape,
+    draw_natures_wrath_head,
+)
+from dungeons_desktops.game.heroes.the_hunter import render as hunter
+from dungeons_desktops.game.heroes.the_inquisitive import appearance as iggy
+from dungeons_desktops.game.heroes.the_inquisitive.companion_render import draw_cat
+from dungeons_desktops.game.heroes.the_inquisitive.model import HAT_RADIUS as IGGY_HAT_RADIUS
+from dungeons_desktops.game.heroes.the_mighty.model import BODY_WIDTH as MIGHTY_BODY_WIDTH
+from dungeons_desktops.game.heroes.the_mighty.render import RAGE, draw_mighty_details
+from dungeons_desktops.game.heroes.the_slayer import render as slayer
+from dungeons_desktops.game.heroes.the_slayer.render import draw_slayer_bandana, draw_slayer_cape
+from dungeons_desktops.render.chromatic import chromatic_appearance
 from dungeons_desktops.render.equipment import WEAPON_COLORS, draw_strokes, draw_trail
 from dungeons_desktops.render.primitives import alpha, mix, pen, qt, world_pen
 from dungeons_desktops.rig.skeleton import BoneTransform
@@ -43,21 +71,27 @@ HERO_PLATE = QColor(118, 132, 146)
 HERO_PLATE_DARK = QColor(31, 48, 44)
 HERO_SILVER = QColor(214, 226, 234)
 HERO_ARMOR_EDGE = QColor(22, 28, 38)
-HERO_WING = QColor(214, 226, 234, 210)
-HERO_WING_FAR = QColor(148, 164, 180, 160)
-HERO_WING_BONE = QColor(238, 244, 248)
 CLASS_COLORS = {
     "barbarian": (QColor(238, 138, 54), QColor(160, 90, 36)),
+    "hero_barbarian": (QColor(238, 138, 54), QColor(160, 90, 36)),
     "paladin": (QColor(252, 224, 92), QColor(172, 150, 58)),
+    "hero_paladin": (QColor(252, 224, 92), QColor(172, 150, 58)),
     "wizard": (QColor(172, 112, 242), QColor(112, 72, 164)),
+    "hero_wizard": (iggy.BODY, iggy.BODY_FAR),
     "ranger": (QColor(108, 200, 88), QColor(70, 132, 58)),
+    "hero_ranger": (QColor(108, 200, 88), QColor(70, 132, 58)),
     "rogue": (QColor(206, 174, 50), QColor(138, 116, 34)),
+    "hero_rogue": (slayer.BODY, slayer.BODY_FAR),
     "cleric": (QColor(244, 242, 234), QColor(170, 168, 160)),
+    "hero_cleric": (QColor(255, 250, 220), QColor(210, 168, 76)),
     "alchemist": (QColor(74, 136, 240), QColor(46, 88, 164)),
+    "hero_alchemist": (hero_alchemist.BODY, hero_alchemist.BODY_FAR),
     "druid": (QColor(70, 182, 160), QColor(44, 118, 104)),
     "sorcerer": (QColor(250, 116, 184), QColor(172, 62, 118)),
+    "hero_sorcerer": (hero_sorcerer.BODY, hero_sorcerer.BODY_FAR),
     "fighter": (QColor(236, 64, 68), QColor(154, 38, 44)),
     "hero_fighter": (QColor(176, 188, 198), QColor(96, 108, 122)),
+    "hero_druid": (GOBLIN_SKIN, GOBLIN_FAR),
 }
 SELECTED = QColor(120, 220, 160)
 WOUNDED = QColor(230, 60, 60)
@@ -80,8 +114,13 @@ def draw_body(
     hidden: Collection[str] = (),
     over_legs: Callable[[dict[str, BoneTransform]], None] | None = None,
     transforms: dict[str, BoneTransform] | None = None,
+    body_width: float | None = None,
+    head_width: float | None = None,
+    show_head_base: bool = True,
+    show_joints: bool = True,
+    joint_color: QColor | None = None,
 ) -> dict[str, BoneTransform]:
-    """Draw a biped in stable back-to-front body order."""
+    """Draw a biped; an explicit body width uses world units and scales with zoom."""
     layout = actor.layout
     if transforms is None:
         transforms = actor.transforms()
@@ -96,30 +135,33 @@ def draw_body(
     radius = layout.head_radius
     neck_length = head.start.distance_to(head.end) - radius
     neck_end = head.start + Vec2.from_angle(head.angle, neck_length)
-    limb_width = LIMB_WIDTH * layout.scale
+    limb_width = LIMB_WIDTH * layout.scale if body_width is None else body_width
+    head_line_width = limb_width if head_width is None else head_width
+    line_pen = pen if body_width is None else world_pen
     joint = 1.1 * layout.scale
 
     if outline is not None:
-        painter.setPen(pen(outline, (LIMB_WIDTH + 2.5) * layout.scale))
+        painter.setPen(line_pen(outline, limb_width + 2.5 * layout.scale))
         for name in shown:
             if name != layout.head:
                 transform = transforms[name]
                 painter.drawLine(qt(transform.start), qt(transform.end))
-        if has_head:
+        if has_head and show_head_base:
+            painter.setPen(line_pen(outline, head_line_width + 2.5 * layout.scale))
             painter.drawLine(qt(head.start), qt(neck_end))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(qt(head.end), radius, radius)
 
     def draw_bones(names: list[str], color: QColor) -> None:
-        painter.setPen(pen(color, limb_width))
+        painter.setPen(line_pen(color, limb_width))
         for name in names:
             transform = transforms[name]
             painter.drawLine(qt(transform.start), qt(transform.end))
 
     draw_bones(far_side, far)
     draw_bones(spine, near)
-    if has_head:
-        painter.setPen(pen(near, limb_width))
+    if has_head and show_head_base:
+        painter.setPen(line_pen(near, head_line_width))
         painter.drawLine(qt(head.start), qt(neck_end))
         painter.setBrush(head_fill)
         painter.drawEllipse(qt(head.end), radius, radius)
@@ -128,8 +170,10 @@ def draw_body(
     draw_bones(near_leg, near)
 
     def draw_joints(names: list[str]) -> None:
+        if not show_joints:
+            return
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(JOINT)
+        painter.setBrush(JOINT if joint_color is None else joint_color)
         for name in names:
             painter.drawEllipse(qt(transforms[name].start), joint, joint)
 
@@ -141,6 +185,7 @@ def draw_body(
     return transforms
 
 
+@chromatic_appearance
 def draw_stickman(
     painter: QPainter,
     stickman: Stickman,
@@ -149,44 +194,156 @@ def draw_stickman(
     transforms: dict[str, BoneTransform] | None = None,
     hide: Collection[str] = (),
 ) -> None:
+    if getattr(stickman, "is_alchemical_ooze", False):
+        hero_alchemist.draw_alchemical_ooze(
+            painter,
+            stickman,
+            SELECTED if selected else outline,
+        )
+        return
+    shadow_clone = getattr(stickman, "is_shadow_clone", False)
+    if shadow_clone and stickman.gone:
+        return
+    if (
+        stickman.variant == "hero_rogue" and not shadow_clone and stickman.animated
+        and stickman.assassinate.spinning
+    ):
+        return
+    if stickman.variant == "hero_alchemist":
+        hero_alchemist.draw_poison_clouds(painter, stickman)
+    if (beast := getattr(stickman, "beast", None)) is not None:
+        hero_alchemist.draw_beastform(painter, beast, SELECTED if selected else outline)
+        return
+    if (dragon := getattr(stickman, "dragon", None)) is not None:
+        draw_magma_dragon(painter, dragon, SELECTED if selected else outline)
+        return
+    if (bear := getattr(stickman, "bear", None)) is not None:
+        draw_bear(painter, bear, SELECTED if selected else outline)
+        return
     strokes = stickman.weapon_strokes()
     held = stickman.weapon_held
     variant = stickman.variant
+    hammer_away = variant == "hero_paladin" and stickman.weapon.hammer_away
     hidden = stickman.severed | set(hide)
     has = {name: name not in hidden for name in (stickman.layout.head, stickman.layout.torso)}
+    nature_hero = variant == "hero_druid"
+    cleric_hero = variant == "hero_cleric"
+    alchemist_hero = variant == "hero_alchemist"
+    sorcerer_hero = variant == "hero_sorcerer"
+    if sorcerer_hero:
+        hero_sorcerer.draw_blood_cloud(painter, stickman)
+        hero_sorcerer.draw_corpsenado(painter, stickman)
+        hero_sorcerer.draw_skeletal_grasp(painter, stickman)
+    if alchemist_hero:
+        if transforms is None:
+            transforms = stickman.transforms()
+        hero_alchemist.draw_back_gear(painter, stickman, transforms)
+    if sorcerer_hero:
+        if transforms is None:
+            transforms = stickman.transforms()
+        hero_sorcerer.draw_orbiting_skulls(
+            painter,
+            stickman,
+            transforms,
+            front=False,
+            outline=SELECTED if selected else outline,
+        )
+    if cleric_hero:
+        if transforms is None:
+            transforms = stickman.transforms()
+        hero_cleric.draw_souls(painter, stickman)
+        hero_cleric.draw_divine_aura(painter, stickman, transforms)
+        hero_cleric.draw_staff_glow(painter, stickman, transforms)
+    if variant == "hero_ranger":
+        hunter.draw_shot(painter, stickman)
+        if has[stickman.layout.torso]:
+            if transforms is None:
+                transforms = stickman.transforms()
+            hunter.draw_back(painter, stickman, transforms)
+    if variant == "hero_wizard":
+        draw_cat(painter, stickman.cat)
+    if variant == "hero_rogue" and has[stickman.layout.torso]:
+        if transforms is None:
+            transforms = stickman.transforms()
+        slayer.draw_slayer_shadow(painter, stickman, transforms)
+        draw_slayer_cape(painter, stickman, transforms)
+    if nature_hero:
+        if transforms is None:
+            transforms = stickman.transforms()
+        draw_nature_aura(painter, stickman, transforms)
+        if has[stickman.layout.torso]:
+            draw_natures_wrath_cape(painter, stickman, transforms)
     equipment_behind = variant == "hero_fighter"
-    if variant == "hero_fighter":
-        posed = stickman.transforms() if transforms is None else transforms
-        if getattr(stickman, "wings", False):
-            _draw_dio_wings(painter, stickman, posed)
     if not held or equipment_behind:
         if equipment_behind:
             draw_trail(painter, stickman.trail)
-        draw_strokes(painter, strokes)
+        draw_strokes(painter, strokes[3:] if hammer_away else strokes)
+    elif variant == "hero_paladin" and not hammer_away:
+        draw_trail(painter, stickman.trail)
+        draw_strokes(painter, strokes[:3])  # Far-hand hammer sits behind his body and shield.
 
     def costume(transforms) -> None:
-        if variant == "wizard" and has[stickman.layout.head]:
-            _draw_hat(painter, stickman, transforms)
-        elif variant == "fighter" and has[stickman.layout.head]:
-            _draw_helmet(painter, stickman, transforms)
+        if variant in ("wizard", "hero_wizard") and has[stickman.layout.head]:
+            _draw_hat(
+                painter, stickman, transforms,
+                radius=IGGY_HAT_RADIUS if variant == "hero_wizard" else None,
+            )
+        elif variant in ("fighter", "hero_fighter") and has[stickman.layout.head]:
+            draw_fighter_helmet(painter, stickman, transforms)
         elif variant == "druid" and has[stickman.layout.head]:
             _draw_antlers(painter, stickman, transforms)
-        if variant == "sorcerer" and has[stickman.layout.torso]:
+        elif variant == "hero_druid" and has[stickman.layout.head]:
+            draw_natures_wrath_head(painter, stickman, transforms)
+        elif variant == "hero_rogue" and has[stickman.layout.head]:
+            draw_slayer_bandana(painter, stickman, transforms)
+        elif variant == "hero_ranger" and has[stickman.layout.head]:
+            hunter.draw_hat(painter, stickman, transforms)
+        elif cleric_hero and has[stickman.layout.head]:
+            hero_cleric.draw_halo(painter, stickman, transforms)
+        elif alchemist_hero and has[stickman.layout.head]:
+            hero_alchemist.draw_headgear(painter, stickman, transforms)
+        elif sorcerer_hero and has[stickman.layout.head]:
+            hero_sorcerer.draw_skull_face(
+                painter,
+                stickman,
+                transforms,
+                SELECTED if selected else outline,
+            )
+        if variant in ("sorcerer", "hero_sorcerer") and has[stickman.layout.torso]:
             _draw_scarf(painter, stickman, transforms)
         if stickman.thrall and has[stickman.layout.head]:
             _draw_thrall_brain(painter, stickman, transforms)
 
     def over_legs(transforms) -> None:
-        if variant == "cleric" and has[stickman.layout.torso]:
+        if variant == "hero_ranger" and has[stickman.layout.torso]:
+            hunter.draw_pistol(painter, stickman, transforms)
+        if variant in ("cleric", "hero_cleric", "hero_wizard") and has[stickman.layout.torso]:
             _draw_robe(painter, stickman, transforms)
-        if held and variant != "hero_fighter":
+        if held and variant not in (
+            "hero_fighter", "hero_paladin", "hero_alchemist", "hero_sorcerer",
+        ):
             draw_trail(painter, stickman.trail)
             draw_strokes(painter, strokes)
 
     near, far = CLASS_COLORS.get(variant, (NEAR_LIMB, FAR_LIMB))
+    if getattr(stickman, "is_simulacrum", False):
+        near, far = iggy.COPY_BODY, iggy.COPY_FAR
+    if shadow_clone:
+        near, far = slayer.SHADOW, slayer.SHADOW_FAR
+    if variant == "hero_barbarian":
+        near = mix(near, RAGE, stickman.fury * 0.85)
+        far = mix(far, RAGE.darker(160), stickman.fury * 0.85)
     if stickman.thrall:
         near, far = mix(near, FLAYER_SKIN, THRALL_TINT), mix(far, FLAYER_SKIN_FAR, THRALL_TINT)
-    head = BACKGROUND
+    head = (
+        GOBLIN_HEAD if variant == "hero_druid"
+        else hero_sorcerer.BONE if sorcerer_hero
+        else BACKGROUND
+    )
+    if getattr(stickman, "is_simulacrum", False):
+        head = iggy.COPY_HEAD
+    if shadow_clone:
+        head = slayer.SHADOW_DARK
     if stickman.damage:
         hurt = 0.72 * min(1.0, stickman.damage / stickman.max_hp)
         near, far = mix(near, WOUNDED, hurt), mix(far, WOUNDED, hurt)
@@ -196,6 +353,25 @@ def draw_stickman(
         head = mix(head, CHARRED, char)
     if stickman.demise is not None:
         near, far, head = demise_colors(stickman.demise, near, far, head)
+    body_width = None
+    if nature_hero:
+        body_width = NATURES_WRATH_BODY_WIDTH * stickman.layout.scale
+    elif variant == "hero_barbarian":
+        body_width = MIGHTY_BODY_WIDTH * stickman.layout.scale
+    elif variant == "hero_wizard":
+        body_width = iggy.BODY_WIDTH * stickman.layout.scale
+    elif variant == "hero_rogue":
+        body_width = slayer.BODY_WIDTH * stickman.layout.scale
+    elif variant == "hero_ranger":
+        body_width = hunter.BODY_WIDTH * stickman.layout.scale
+    elif cleric_hero:
+        body_width = hero_cleric.BODY_WIDTH * stickman.layout.scale
+    elif alchemist_hero:
+        body_width = hero_alchemist.BODY_WIDTH * stickman.layout.scale
+    elif sorcerer_hero:
+        body_width = hero_sorcerer.BODY_WIDTH * stickman.layout.scale
+    elif variant == "hero_fighter":
+        body_width = hero_fighter.BODY_WIDTH * stickman.layout.scale
     transforms = draw_body(
         painter,
         stickman,
@@ -207,12 +383,57 @@ def draw_stickman(
         hidden=hidden,
         over_legs=over_legs,
         transforms=transforms,
+        body_width=body_width,
+        head_width=(body_width * 0.5 if alchemist_hero and body_width is not None else None),
+        show_head_base=not sorcerer_hero,
+        show_joints=not nature_hero,
+        joint_color=(
+            near
+            if variant in (
+                "hero_wizard", "hero_rogue", "hero_ranger", "hero_cleric",
+                "hero_alchemist",
+                "hero_sorcerer",
+                "hero_fighter",
+            )
+            else None
+        ),
     )
 
+    if alchemist_hero:
+        hero_alchemist.draw_gloves_and_tubes(painter, stickman, transforms)
+        if held:
+            draw_trail(painter, stickman.trail)
+            draw_strokes(painter, strokes)
+    elif sorcerer_hero:
+        if held:
+            draw_strokes(painter, [stroke for stroke in strokes if stroke.kind != "orb"])
+            hero_sorcerer.draw_focus(
+                painter,
+                stickman,
+                transforms,
+                SELECTED if selected else outline,
+            )
+        hero_sorcerer.draw_orbiting_skulls(
+            painter,
+            stickman,
+            transforms,
+            front=True,
+            outline=SELECTED if selected else outline,
+        )
+
     if variant == "hero_fighter":
+        hero_fighter.draw_armor(painter, stickman, transforms, hidden)
+    elif variant == "hero_barbarian":
+        draw_mighty_details(painter, stickman, transforms, hidden)
+    elif variant == "hero_paladin":
         _draw_hero_armor(painter, stickman, transforms, hidden)
-        if has[stickman.layout.head]:
-            _draw_hero_helmet(painter, stickman, transforms)
+        if held:
+            draw_strokes(painter, strokes[3:])
+    elif cleric_hero:
+        hero_cleric.draw_resurrection_flash(painter, stickman)
+
+    if stickman.divine_prayer > 0.0:
+        hero_cleric.draw_prayer_glow(painter, stickman, transforms)
 
     if stickman.paralysed and has[stickman.layout.head]:
         _draw_stun(painter, stickman, transforms)
@@ -288,15 +509,25 @@ def _polygon(painter: QPainter, points: Iterable[Vec2], fill: QColor, edge: QCol
     painter.drawPolygon([qt(p) for p in points])
 
 
-def _draw_hat(painter: QPainter, stickman: Stickman, transforms) -> None:
+def _draw_hat(
+    painter: QPainter, stickman: Stickman, transforms, radius: float | None = None
+) -> None:
     """A wizard's tall pointed hat, its tip flopping back, on a wide brim."""
+    fill, edge, star = (
+        (iggy.HAT, iggy.HAT_EDGE, iggy.HAT_STAR)
+        if stickman.variant == "hero_wizard" else (HAT, HAT_EDGE, HAT_STAR)
+    )
     center, up, back, r = _head_frame(stickman, transforms)
+    if radius is not None:
+        # Keep the brim seated on the head while preserving the full hat geometry.
+        center += up * (0.55 * (r - radius))
+        r = radius
     side = up.rotated(math.pi / 2)
     base = center + up * (0.7 * r)
     bend = base + up * (1.3 * r) + back * (0.25 * r)
     tip = base + up * (2.1 * r) + back * (1.1 * r)
     cone = [base - side * (0.85 * r), bend - side * (0.35 * r), tip, bend + side * (0.35 * r)]
-    _polygon(painter, [*cone, base + side * (0.85 * r)], HAT, HAT_EDGE)
+    _polygon(painter, [*cone, base + side * (0.85 * r)], fill, edge)
     brim = center + up * (0.55 * r)
     _polygon(
         painter,
@@ -306,15 +537,15 @@ def _draw_hat(painter: QPainter, stickman: Stickman, transforms) -> None:
             brim + side * (1.2 * r) + up * (0.35 * r),
             brim - side * (1.2 * r) + up * (0.35 * r),
         ],
-        HAT,
-        HAT_EDGE,
+        fill,
+        edge,
     )
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(HAT_STAR)
+    painter.setBrush(star)
     painter.drawEllipse(qt(base.lerp(bend, 0.5)), 0.22 * r, 0.22 * r)
 
 
-def _draw_helmet(painter: QPainter, stickman: Stickman, transforms) -> None:
+def draw_fighter_helmet(painter: QPainter, stickman: Stickman, transforms) -> None:
     """A steel knight's helmet with a dark visor, brow ridge and breathing vents."""
     center, up, _, r = _head_frame(stickman, transforms)
     forward = up.rotated(math.pi / 2) * stickman.facing
@@ -440,60 +671,13 @@ def _draw_hero_armor(
             )
 
 
-def _draw_dio_wings(painter: QPainter, stickman: Stickman, transforms) -> None:
-    """Articulated silver angel wings unfolding and flapping behind Dio."""
-    torso = transforms[stickman.layout.torso]
-    root = torso.end.lerp(torso.start, 0.22)
-    back = Vec2(-float(stickman.facing), 0.0)
-    up = Vec2(0.0, -1.0)
-    opened = clamp(getattr(stickman, "wing_open", 1.0), 0.12, 1.0)
-    beat = math.sin(getattr(stickman, "flight_clock", 0.0) * 8.0)
-    for far, scale in ((True, 0.78), (False, 1.0)):
-        lift = (5.0 + 7.0 * opened + 3.0 * beat) * scale
-        reach = (7.0 + 17.0 * opened) * scale
-        base = root + back * (2.0 if far else 0.5)
-        elbow = base + back * (reach * 0.42) + up * lift
-        tip = base + back * reach + up * (lift * 0.45)
-        lower = base + back * (reach * 0.62) - up * (5.0 * opened)
-        fill = HERO_WING_FAR if far else HERO_WING
-        edge = HERO_PLATE_DARK if far else HERO_ARMOR_EDGE
-        _polygon(painter, (base, elbow, tip, lower), fill, edge)
-        painter.setPen(world_pen(HERO_WING_BONE, 1.3 if far else 1.7))
-        painter.drawPolyline([qt(base), qt(elbow), qt(tip)])
-        for fraction, drop in ((0.42, 4.0), (0.62, 5.5), (0.80, 6.5)):
-            feather_root = base.lerp(tip, fraction)
-            feather_tip = feather_root + back * (5.0 * scale) - up * (drop * opened * scale)
-            painter.setPen(world_pen(edge, 2.6 if far else 3.2))
-            painter.drawLine(qt(feather_root), qt(feather_tip))
-            painter.setPen(world_pen(fill, 1.5 if far else 2.0))
-            painter.drawLine(qt(feather_root), qt(feather_tip))
-
-
-def _draw_hero_helmet(painter: QPainter, stickman: Stickman, transforms) -> None:
-    """The established Fighter helmet with Dio's silver Spartan crest."""
-    center, up, _, r = _head_frame(stickman, transforms)
-    forward = up.rotated(math.pi / 2) * stickman.facing
-
-    def at(x: float, y: float) -> Vec2:
-        return center + forward * (x * r) + up * (y * r)
-
-    crest = (
-        at(-0.96, 0.82),
-        at(-1.12, 1.48),
-        at(-0.82, 1.98),
-        at(-0.22, 2.14),
-        at(0.38, 1.94),
-        at(0.76, 1.46),
-        at(0.66, 0.92),
-        at(0.22, 1.12),
-        at(-0.42, 1.18),
-    )
-    _polygon(painter, crest, HERO_SILVER, HERO_ARMOR_EDGE)
-    _draw_helmet(painter, stickman, transforms)
-
-
 def _draw_scarf(painter: QPainter, stickman: Stickman, transforms) -> None:
-    """A pale pink neck wrap and two trailing ends, attached to the torso pose."""
+    """A neck wrap and two trailing ends, attached to the torso pose."""
+    scarf, edge = (
+        (hero_sorcerer.SCARF, hero_sorcerer.SCARF_EDGE)
+        if stickman.variant == "hero_sorcerer"
+        else (SCARF, SCARF_EDGE)
+    )
     torso = transforms[stickman.layout.torso]
     neck = torso.end
     down = (torso.start - neck).normalized()
@@ -505,19 +689,21 @@ def _draw_scarf(painter: QPainter, stickman: Stickman, transforms) -> None:
         _polygon(
             painter,
             [neck, neck + down * (0.45 * r), tip + down * (0.4 * r), tip - back * (0.25 * r), tip],
-            SCARF,
-            SCARF_EDGE,
+            scarf,
+            edge,
         )
-    painter.setPen(world_pen(SCARF_EDGE, r * 0.7))
+    painter.setPen(world_pen(edge, r * 0.7))
     painter.drawLine(qt(neck - back * (0.5 * r)), qt(neck + back * (0.5 * r)))
-    painter.setPen(world_pen(SCARF, r * 0.45))
+    painter.setPen(world_pen(scarf, r * 0.45))
     painter.drawLine(qt(neck - back * (0.5 * r)), qt(neck + back * (0.5 * r)))
 
 
 def _draw_robe(painter: QPainter, stickman: Stickman, transforms) -> None:
-    """A cleric's white robe: fitted at the shoulders, belted with a gold sash, and a
-    skirt that flares to mid-shin and swings with the legs. A gold stole runs down
-    the front."""
+    """A fitted robe with a sash, stole, and flared skirt that swings with the legs."""
+    fill, edge, sash = (
+        (iggy.ROBE, iggy.ROBE_EDGE, iggy.ROBE_SASH)
+        if stickman.variant == "hero_wizard" else (ROBE, ROBE_EDGE, ROBE_SASH)
+    )
     layout = stickman.layout
     r = layout.head_radius
     torso = transforms[layout.torso]
@@ -548,13 +734,13 @@ def _draw_robe(painter: QPainter, stickman: Stickman, transforms) -> None:
         qt(waist - forward * (0.45 * r)),
     )
     path.closeSubpath()
-    painter.setPen(pen(ROBE_EDGE, 1.0))
-    painter.setBrush(ROBE)
+    painter.setPen(pen(edge, 1.0))
+    painter.setBrush(fill)
     painter.drawPath(path)
 
-    painter.setPen(world_pen(ROBE_SASH, 0.22 * r))
+    painter.setPen(world_pen(sash, 0.22 * r))
     painter.drawLine(qt(torso.end + forward * (0.2 * r)), qt(hem_middle.lerp(hem_front, 0.4)))
-    painter.setPen(world_pen(ROBE_SASH, 0.32 * r))
+    painter.setPen(world_pen(sash, 0.32 * r))
     painter.drawLine(qt(waist - forward * (0.6 * r)), qt(waist + forward * (0.6 * r)))
 
 

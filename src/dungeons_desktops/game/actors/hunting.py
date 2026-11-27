@@ -22,6 +22,12 @@ NEAREST_MARGIN = 30.0
 """For `nearest`: switch as soon as another is this much nearer, however far off."""
 
 
+def priority_prey(prey: list[Stickman]) -> list[Stickman]:
+    """Prefer a taunting hero among eligible targets; callers retain range/path rules."""
+    priority = max((getattr(actor, "target_priority", 0) for actor in prey), default=0)
+    return [actor for actor in prey if getattr(actor, "target_priority", 0) == priority]
+
+
 class Hunt:
     """One quarry: the stickman nearest some point, re-picked every `retarget_every`
     (switching only for a clearly nearer one), and dropped for `IGNORE_FOR` once
@@ -47,7 +53,7 @@ class Hunt:
 
     def update(self, dt: float, origin: Vec2, stickmen: list[Stickman]) -> Stickman | None:
         self._ignored = {s: t - dt for s, t in self._ignored.items() if t > dt}
-        prey = [s for s in stickmen if s.prey and s not in self._ignored]
+        prey = priority_prey([s for s in stickmen if s.prey and s not in self._ignored])
 
         def distance(stickman: Stickman) -> float:
             return stickman.contact().distance_to(origin)

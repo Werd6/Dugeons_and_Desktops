@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from dungeons_desktops.game.adventurers.actor import Stickman
 
 SPELLS = ("fireball", "power_word_kill", "magic_missiles", "chain_lightning", "black_tentacles")
+BASE_SPELLS = SPELLS
 SOURCE = "lich"
 
 FIREBALL_GRAVITY = 420.0
@@ -57,7 +58,7 @@ MISSILE_SPEED = 360.0
 MISSILE_TURN = 9.0
 MISSILE_LIFE = 9.0
 
-CHAIN_HOPS = 10
+CHAIN_HOPS = 3
 CHAIN_REACH = 300.0
 CHAIN_DAMAGE = (3, 3, 2, 2)
 CHAIN_STEP = 0.08
@@ -75,6 +76,40 @@ TENTACLE_DAMAGE = 1
 TENTACLE_FOLLOW = 10.0  # how quickly a tip closes on where it wants to be (1/s)
 
 RISE_DELAY = 1.5
+
+CLOUD_DURATION = 7.0
+CLOUD_RADIUS = 92.0
+CLOUD_DAMAGE = 1
+CLOUD_HIT_INTERVAL = 1.0
+CLOUD_SUMMON_TIME = 0.55
+
+
+def tentacle_faces(world) -> list[tuple[Vec2, Vec2, Vec2, int | None]]:
+    """Every surface face from which a Black Tentacle-style spell can emerge."""
+    floor, left, right = world.floor_y, world.left, world.width
+    top = world.ceiling if world.ceiling is not None else 0.0
+    faces: list[tuple[Vec2, Vec2, Vec2, int | None]] = [
+        (Vec2(left, floor), Vec2(right, floor), Vec2(0.0, -1.0), None),
+        (Vec2(left, top), Vec2(left, floor), Vec2(1.0, 0.0), None),
+        (Vec2(right, top), Vec2(right, floor), Vec2(-1.0, 0.0), None),
+    ]
+    if world.ceiling is not None:
+        faces.append((Vec2(left, top), Vec2(right, top), Vec2(0.0, 1.0), None))
+    for index, rect in enumerate(world.boxes):
+        x0, x1, y0 = rect.x, rect.x + rect.width, rect.y
+        y1 = min(rect.y + rect.height, floor)
+        faces.append((Vec2(x0, y0), Vec2(x1, y0), Vec2(0.0, -1.0), index))
+        faces.append((Vec2(x0, y0), Vec2(x0, y1), Vec2(-1.0, 0.0), index))
+        faces.append((Vec2(x1, y0), Vec2(x1, y1), Vec2(1.0, 0.0), index))
+        if rect.y + rect.height < floor - 1.0:
+            faces.append((Vec2(x0, y1), Vec2(x1, y1), Vec2(0.0, 1.0), index))
+    return faces
+
+
+def tentacle_buried(world, base: Vec2, normal: Vec2, box: int | None) -> bool:
+    """Whether an arm at ``base`` would emerge directly inside another window."""
+    probe = base + normal * 3.0
+    return any(index != box and rect.contains(probe) for index, rect in enumerate(world.boxes))
 
 SMITE_HANG = 0.35
 SMITE_DROP = 0.15
@@ -233,6 +268,20 @@ class Rising:
     wait: float = RISE_DELAY
 
 
+@dataclass
+class Cloudkill:
+    center: Vec2
+    caster: object
+    age: float = 0.0
+    ticks: int = 0
+
+    @property
+    def strength(self) -> float:
+        grow = min(1.0, self.age / CLOUD_SUMMON_TIME)
+        fade = min(1.0, max(0.0, (CLOUD_DURATION - self.age) / 0.8))
+        return grow * grow * (3.0 - 2.0 * grow) * fade
+
+
 class Necromancy:
     def __init__(self, world) -> None:
         self.world = world
@@ -244,11 +293,13 @@ class Necromancy:
         self.darts: list[Dart] = []
         self.arcs: list[Arc] = []
         self.tentacles: list[Tentacles] = []
+        self.cloudkills: list[Cloudkill] = []
         self.risings: list[Rising] = []
         self.smites: list[Smite] = []
         self.smitten = 0
-        self.hits: dict[str, int] = {spell: 0 for spell in SPELLS}
-        self.kills: dict[str, int] = {spell: 0 for spell in SPELLS}
+        tracked = (*SPELLS, "cloudkill")
+        self.hits: dict[str, int] = {spell: 0 for spell in tracked}
+        self.kills: dict[str, int] = {spell: 0 for spell in tracked}
         self.raised = 0
 
     @property
@@ -345,32 +396,16 @@ class Necromancy:
                 Tentacles(arms[:TENTACLE_CAP], rng.randrange(1 << 20), caster=caster)
             )
 
+    def _cast_cloudkill(self, caster: object, origin: Vec2, foe: Stickman) -> None:
+        self.cloudkills.append(Cloudkill(foe.center(), caster))
+
     def _faces(self) -> list[tuple[Vec2, Vec2, Vec2, int | None]]:
         """Every face tentacles can grow from: (start, end, outward normal, box)."""
-        world = self.world
-        floor, left, right = world.floor_y, world.left, world.width
-        top = world.ceiling if world.ceiling is not None else 0.0
-        faces: list[tuple[Vec2, Vec2, Vec2, int | None]] = [
-            (Vec2(left, floor), Vec2(right, floor), Vec2(0.0, -1.0), None),
-            (Vec2(left, top), Vec2(left, floor), Vec2(1.0, 0.0), None),
-            (Vec2(right, top), Vec2(right, floor), Vec2(-1.0, 0.0), None),
-        ]
-        if world.ceiling is not None:
-            faces.append((Vec2(left, top), Vec2(right, top), Vec2(0.0, 1.0), None))
-        for i, rect in enumerate(world.boxes):
-            x0, x1, y0 = rect.x, rect.x + rect.width, rect.y
-            y1 = min(rect.y + rect.height, floor)
-            faces.append((Vec2(x0, y0), Vec2(x1, y0), Vec2(0.0, -1.0), i))
-            faces.append((Vec2(x0, y0), Vec2(x0, y1), Vec2(-1.0, 0.0), i))
-            faces.append((Vec2(x1, y0), Vec2(x1, y1), Vec2(1.0, 0.0), i))
-            if rect.y + rect.height < floor - 1.0:
-                faces.append((Vec2(x0, y1), Vec2(x1, y1), Vec2(0.0, 1.0), i))
-        return faces
+        return tentacle_faces(self.world)
 
     def _buried(self, base: Vec2, normal: Vec2, box: int | None) -> bool:
         """Whether a tentacle at `base` would grow straight into another window."""
-        probe = base + normal * 3.0
-        return any(i != box and rect.contains(probe) for i, rect in enumerate(self.world.boxes))
+        return tentacle_buried(self.world, base, normal, box)
 
     # ----- landing --------------------------------------------------------------------
 
@@ -391,7 +426,7 @@ class Necromancy:
         if killed:
             self.kills[spell] += 1
             self.risings.append(Rising(stickman))
-            if stickman.variant == "cleric" and caster is not None:
+            if stickman.variant in ("cleric", "hero_cleric") and caster is not None:
                 self.smite(caster)
         return killed
 
@@ -442,6 +477,7 @@ class Necromancy:
         self._update_darts(dt)
         self._update_arcs(dt)
         self._update_tentacles(dt)
+        self._update_cloudkills(dt)
         for blast in self.blasts:
             blast.age += dt
         self.blasts = [b for b in self.blasts if b.age < BLAST_TIME]
@@ -487,10 +523,11 @@ class Necromancy:
                 continue
             away = (body - center).normalized() if body.distance_to(center) > 1 else Vec2(0, -1)
             push = away * FIREBALL_PUSH + Vec2(0.0, -160.0)
+            damage = 2 if getattr(caster, "legendary_mage", False) else FIREBALL_DAMAGE
             self._strike(
                 "fireball",
                 stickman,
-                FIREBALL_DAMAGE,
+                damage,
                 body,
                 push,
                 "Burned up by a fireball!",
@@ -582,10 +619,11 @@ class Necromancy:
                 if arc.target.prey and arc.target in self.world.stickmen:
                     arc.end = arc.target.center()
                     push = (arc.end - arc.start).normalized() * 120.0
+                    damage = 2 if getattr(arc.caster, "legendary_mage", False) else arc.damage
                     killed = self._strike(
                         "chain_lightning",
                         arc.target,
-                        arc.damage,
+                        damage,
                         arc.end,
                         push,
                         "Fried by chain lightning!",
@@ -635,6 +673,34 @@ class Necromancy:
                         spell.caster,
                     )
         self.tentacles = [t for t in self.tentacles if t.age < TENTACLE_TIME and t.arms]
+
+    def _update_cloudkills(self, dt: float) -> None:
+        for cloud in self.cloudkills:
+            previous = cloud.age
+            cloud.age = min(CLOUD_DURATION, cloud.age + dt)
+            active = max(0.0, cloud.age - CLOUD_SUMMON_TIME)
+            previous_active = max(0.0, previous - CLOUD_SUMMON_TIME)
+            due = int((active + 1e-9) / CLOUD_HIT_INTERVAL)
+            previous_due = int((previous_active + 1e-9) / CLOUD_HIT_INTERVAL)
+            for _ in range(max(0, due - max(cloud.ticks, previous_due))):
+                for stickman in self._prey():
+                    point = stickman.center()
+                    if point.distance_to(cloud.center) > CLOUD_RADIUS:
+                        continue
+                    if any(box.contains(point) for box in self.world.boxes):
+                        continue
+                    away = (point - cloud.center).normalized()
+                    self._strike(
+                        "cloudkill",
+                        stickman,
+                        CLOUD_DAMAGE,
+                        point,
+                        away * 10.0 + Vec2(0.0, -8.0),
+                        "Choked by an archlich's cloudkill!",
+                        cloud.caster,
+                    )
+                cloud.ticks += 1
+        self.cloudkills = [cloud for cloud in self.cloudkills if cloud.age < CLOUD_DURATION]
 
     def _writhe(self, arm: Tentacle, spell: Tentacles, strength: float, dt: float) -> None:
         """Move the tip: onto what it holds, else reaching out along its normal and

@@ -34,6 +34,7 @@ from dungeons_desktops.game.effects.ballistics import GRAVITY as BOMB_GRAVITY
 from dungeons_desktops.game.effects.ballistics import has_clear_lob, lob_velocity
 from dungeons_desktops.game.effects.breath import DEATH_TIME, Demise
 from dungeons_desktops.game.effects.fire import BURN_TIME, Burn
+from dungeons_desktops.game.heroes.hero_paladin import aura as paladin_aura
 from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.biped import BipedLayout
@@ -69,6 +70,8 @@ THRALL_REACH = 20.0
 THRALL_WINDUP = 0.3
 THRALL_COOLDOWN = 1.2
 THRALL_REPLAN = 0.5
+THRALL_LIFETIME = 60.0
+"""Mind-flayer thralls collapse after this many seconds (intellect devourer burns out the host)."""
 HURT_GRACE = {"dragon": 1.0, "worm": 1.0, "hydra": 1.0, "chimera's fire": 1.0}
 """Seconds after a hit from this source before it can hurt the same adventurer again,
 so one breath of fire or one bite lands once."""
@@ -111,6 +114,8 @@ class StickMode(Enum):
 
 
 class Stickman(Actor):
+    seek_radius = SEEK_RADIUS
+
     def __init__(
         self,
         world: World,
@@ -130,6 +135,10 @@ class Stickman(Actor):
         self.mode = StickMode.ANIMATED
         self.wander = wander
         self._wander_wait = 0.0
+        self._wander_destination: Vec2 | None = None
+        self._aura_leader: Stickman | None = None
+        self._aura_repath = 0.0
+        self._aura_surface_id: int | None = None
         self.down_time = 0.0
         self.burn: Burn | None = None
         self.demise: Demise | None = None
@@ -161,21 +170,36 @@ class Stickman(Actor):
         self._shunned: dict[object, float] = {}
         self.thrall = False
         """Under a mind flayer's control: hunts the other adventurers, who hunt him."""
+        self.mind_devoured = False
+        """True when an intellect devourer rides the skull (hatches on death)."""
+        self.thrall_age = 0.0
+        """Seconds since a mind-flayer thrall was enthralled; dies at `THRALL_LIFETIME`."""
+        self.ritual_bound = False
+        """Legendary mind flayer: walking to a thrall-gathering point instead of hunting."""
+        self.ritual_goal: Vec2 | None = None
         self.lure: object | None = None
         """The mimic he's been lured to (he thinks it's a treasure chest)."""
         self.lure_age = 0.0
         self.reeled: object | None = None
         """The mimic reeling him in on its tongue."""
         self.swallowed = False
+        self._soul_claimed = False
         """Swallowed whole by a mimic: gone, body and all."""
         self.engulfed_by: object | None = None
         """The ooze holding this adventurer, who remains able to attack from inside."""
+        self.rift_held_by: object | None = None
+        """Elder-thing rift tentacle currently dragging this body through a tear."""
         self.blind = 0.0
         """Seconds left blind (in a drow's globe of darkness): he can't attack, and gropes
         about slowly instead of going anywhere."""
         self._grope_wait = 0.0
         self.faerie = 0.0
         """Seconds left outlined in faerie fire."""
+        self.poison = 0.0
+        """Seconds of drow venom left."""
+        self._poison_tick = 1.0
+        self.divine_prayer = 0.0
+        """Seconds left praying as part of a Hero Cleric's Divine Judgement."""
         self.hunt = nearest()
         self._blow: float | None = None
         """A thrall's blow, landing in this many seconds."""
@@ -193,7 +217,23 @@ class Stickman(Actor):
     @property
     def prey(self) -> bool:
         """Fair game for the monsters: on his feet and in his right mind."""
-        return self.animated and not self.thrall and self.engulfed_by is None
+        return (
+            self.animated
+            and not self.thrall
+            and self.engulfed_by is None
+            and self.rift_held_by is None
+        )
+
+    @property
+    def is_hero(self) -> bool:
+        """Whether this adventurer uses one of the named hero variants."""
+        return self.variant in stick_figure.HEROES and not getattr(
+            self, "is_shadow_clone", False
+        )
+
+    @property
+    def protector(self) -> Stickman | None:
+        return paladin_aura.protector(self)
 
     @property
     def paralysed(self) -> bool:
@@ -240,7 +280,7 @@ class Stickman(Actor):
         return self.calling.hp
 
     @property
-    def hp(self) -> int:
+    def hp(self) -> float:
         return max(0, self.max_hp - self.damage)
 
     # ----- classes and attacks -------------------------------------------------
@@ -295,7 +335,7 @@ class Stickman(Actor):
             return False
         monster, point = found
         if (
-            not isinstance(self.weapon, Wand | Bow | Bombs | DruidStaff)
+            not self._shoots
             and abs(point.y - center.y) > MELEE_HEIGHT
         ):
             return False
@@ -385,16 +425,24 @@ class Stickman(Actor):
     @property
     def movement_paused(self) -> bool:
         weapon = self.weapon
-        return weapon is not None and weapon.busy and weapon.stops_movement
+        return self.divine_prayer > 0.0 or (
+            weapon is not None and weapon.busy and weapon.stops_movement
+        )
 
     def weapon_strokes(self) -> list[Stroke]:
         if self.weapon is None:
             return []
-        return self.weapon.strokes(self.transforms(), self.facing, slung=not self.animated)
+        return self.weapon.strokes(
+            self.transforms(), self.facing,
+            slung=not self.animated or self.divine_prayer > 0.0,
+        )
 
     @property
     def weapon_held(self) -> bool:
-        return self.weapon is not None and self.animated and self.weapon.held
+        return (
+            self.weapon is not None and self.animated and self.weapon.held
+            and self.divine_prayer <= 0.0
+        )
 
     def _update_weapon(self) -> None:
         weapon = self.weapon
@@ -491,8 +539,27 @@ class Stickman(Actor):
 
     def update(self, dt: float) -> None:
         self.faerie = max(0.0, self.faerie - dt)
+        if self.animated and self.poison > 0.0:
+            self.poison = max(0.0, self.poison - dt)
+            self._poison_tick -= dt
+            if self._poison_tick <= 0.0:
+                self._poison_tick += 1.0
+                self.hurt(
+                    1,
+                    self.center(),
+                    Vec2(0.0, -4.0),
+                    "drow poison",
+                    "Succumbed to a House Assassin's poison!",
+                    bleed=False,
+                )
         if not self.animated:
             self.ragdoll.step(dt)
+            if self.rift_held_by is not None:
+                # Limp body: the rift carries it; do not stand up or fade as a corpse.
+                self.knocked = True
+                self.stun = max(self.stun, 0.5)
+                self.down_time = 0.0
+                return
             if self.knocked:
                 self.stun -= dt
                 if self.stun <= 0.0:
@@ -528,6 +595,9 @@ class Stickman(Actor):
         if self.blind > 0.0:
             self._grope(dt)
             return
+        if self.divine_prayer > 0.0:
+            self._pray(dt)
+            return
         self._replan_if_needed()
         weapon = self.weapon
         if weapon is not None and not weapon.busy and self.dragging_limb is None:
@@ -541,6 +611,8 @@ class Stickman(Actor):
                     self._face_nearest_monster()
         weapon_busy = weapon is not None and weapon.busy
         seeking = self.wander and not weapon_busy and self._seek(dt)
+        if self.wander and not seeking and not weapon_busy:
+            paladin_aura.keep_with_squad(self, dt)
         if self.wander and not seeking and not self.follower.moving and not weapon_busy:
             self._wander_wait -= dt
             if self._wander_wait <= 0.0:
@@ -552,6 +624,35 @@ class Stickman(Actor):
             command = self.follower.update(dt * self.calling.speed)
         self.locomotion.update(dt, command)
         self._update_weapon()
+        self.ragdoll.facing = self.locomotion.facing
+        self.ragdoll.drive(self.locomotion.pose, dt)
+        self._track_velocity(dt)
+
+    def begin_divine_prayer(self, seconds: float) -> bool:
+        """Stop and pray for a Hero Cleric, returning whether the ally joined in."""
+        if (
+            not self.prey or self.paralysed or self.blind > 0.0 or self.lure is not None
+            or self.reeled is not None or self.engulfed_by is not None
+            or self.dragging_limb is not None or self.locomotion.mode is not PoseMode.WALK
+            or self.follower.in_transition
+        ):
+            return False
+        if self.weapon is not None:
+            self.weapon.cancel()
+        self.foe = None
+        self.quarry = None
+        self._resume_route = False
+        self.halt()
+        self.divine_prayer = max(self.divine_prayer, seconds)
+        return True
+
+    def _pray(self, dt: float) -> None:
+        from dungeons_desktops.game.heroes.hero_cleric.prayer import apply_prayer_pose
+
+        self.divine_prayer = max(0.0, self.divine_prayer - dt)
+        self.halt()
+        self.locomotion.update(dt, self.follower.command())
+        apply_prayer_pose(self)
         self.ragdoll.facing = self.locomotion.facing
         self.ragdoll.drive(self.locomotion.pose, dt)
         self._track_velocity(dt)
@@ -628,6 +729,12 @@ class Stickman(Actor):
             self._grope_wait = 0.0
             self.halt()
         self.blind = max(self.blind, seconds)
+
+    def poison_for(self, seconds: float) -> None:
+        """Apply or refresh a drow bolt's lingering venom."""
+        if self.prey:
+            self.poison = max(self.poison, seconds)
+            self._poison_tick = min(self._poison_tick, 1.0)
 
     def _grope(self, dt: float) -> None:
         """Blind: shuffle a few steps this way or that along where he stands, slowly."""
@@ -740,6 +847,8 @@ class Stickman(Actor):
         if not self.animated:
             return
         self.thrall = True
+        self.mind_devoured = True
+        self.thrall_age = 0.0
         self.wander = False
         self.goal = None
         self.hunt = nearest()
@@ -756,6 +865,10 @@ class Stickman(Actor):
         if not self.thrall:
             return
         self.thrall = False
+        self.mind_devoured = False
+        self.thrall_age = 0.0
+        self.ritual_bound = False
+        self.ritual_goal = None
         self.wander = True
         self._blow = None
         self._resume_route = False
@@ -772,6 +885,36 @@ class Stickman(Actor):
             and theirs.distance_to(center) <= THRALL_REACH + slack
         )
 
+    def _expire_thrall(self) -> None:
+        """Mind-flayer thrall lifetime ran out: the host collapses and the devourer hatches."""
+        if not self.animated or not self.thrall:
+            return
+        self.hurt(
+            max(1.0, float(self.hp)),
+            self.center(),
+            Vec2(0.0, -60.0),
+            "thrall",
+            "The thrall's stolen mind burned out!",
+        )
+
+    def _thrall_ritual_walk(self, dt: float) -> None:
+        """Path to the legendary mind flayer's gathering point; no hunting on the way."""
+        goal = self.ritual_goal
+        assert goal is not None
+        if self.weapon is not None and self.weapon.busy:
+            self.weapon.cancel()
+        self._blow = None
+        self._thrall_replan -= dt
+        if self._thrall_replan <= 0.0 and not self.follower.in_transition:
+            self._thrall_replan = THRALL_REPLAN
+            self.goal = goal
+            self.replan()
+        command = self.follower.update(dt * self.calling.speed)
+        self.locomotion.update(dt, command)
+        self.ragdoll.facing = self.locomotion.facing
+        self.ragdoll.drive(self.locomotion.pose, dt)
+        self._track_velocity(dt)
+
     @property
     def _shoots(self) -> bool:
         return isinstance(self.weapon, Wand | Bow | Bombs | DruidStaff)
@@ -780,7 +923,15 @@ class Stickman(Actor):
         """Hunt down the nearest free adventurer: a wizard, ranger, alchemist or druid
         thrall casts, shoots, throws or lashes at him from range like they would at a
         monster; the others strike him with whatever is in hand."""
+        if self.mind_devoured:
+            self.thrall_age += dt
+            if self.thrall_age >= THRALL_LIFETIME:
+                self._expire_thrall()
+                return
         self._replan_if_needed()
+        if self.ritual_bound and self.ritual_goal is not None:
+            self._thrall_ritual_walk(dt)
+            return
         others = [s for s in self.world.stickmen if s is not self]
         target = self.hunt.update(dt, self.contact(), others)
         shoots = self._shoots
@@ -858,12 +1009,12 @@ class Stickman(Actor):
         weapon = self.weapon
         if isinstance(weapon, HolyStaff):
             return CLERIC_STAND
-        if isinstance(weapon, Wand | Bow | Bombs):
+        if self._shoots and not isinstance(weapon, DruidStaff):
             return self.calling.reach * RANGED_STAND
         return self.calling.reach * MELEE_STAND
 
     def _seek(self, dt: float) -> bool:
-        """Go after the nearest monster within `SEEK_RADIUS`, stopping once it's close
+        """Go after the nearest monster within `seek_radius`, stopping once it's close
         enough to fight (see `_stand_off`). True while he has one to go after; a
         monster he can't get any nearer to is left alone for `SEEK_GIVE_UP`."""
         self._shunned = {m: t - dt for m, t in self._shunned.items() if t > dt}
@@ -880,14 +1031,14 @@ class Stickman(Actor):
         vines = isinstance(self.weapon, DruidStaff)
         found = [
             (m, part)
-            for m, part in self.world.monsters_near(center, SEEK_RADIUS, through_ground=vines)
+            for m, part in self.world.monsters_near(center, self.seek_radius, through_ground=vines)
             if m not in self._shunned
         ]
         if not found:
             return False
         monster, part = found[0]
         self.quarry = monster
-        melee = not isinstance(self.weapon, Wand | Bow | Bombs | DruidStaff | HolyStaff)
+        melee = not self._shoots and not isinstance(self.weapon, HolyStaff)
         level = not melee or abs(part.y - center.y) <= MELEE_HEIGHT
         if part.distance_to(center) <= self._stand_off() and level:
             if self.follower.moving:
@@ -915,6 +1066,9 @@ class Stickman(Actor):
         self.say("Wandering" if self.wander else "Stopped wandering")
 
     def _pick_wander_goal(self) -> None:
+        if (leader := paladin_aura.squad_leader(self)) is not None:
+            paladin_aura.wander_inside(self, leader)
+            return
         random = self.world.random
         start = self.follower.current_anchor()
         reachable = self.planner.reachable(start.surface)
@@ -933,7 +1087,7 @@ class Stickman(Actor):
             point = surface.point_at(random.uniform(surface.low, surface.high))
             route = self.planner.plan(start, Anchor(surface, point))
             if route is not None and route.steps:
-                self.goal = point
+                self.goal = self._wander_destination = point
                 self.goal_reachable = True
                 self.follower.set_route(route)
                 return
@@ -947,8 +1101,10 @@ class Stickman(Actor):
     # ----- ragdoll -------------------------------------------------------------
 
     def lost_support(self, contact: Vec2) -> None:
+        """A changed window causes a recoverable fall, not a corpse that despawns."""
         self.say("The ground moved out from under it!")
-        self.go_ragdoll()
+        # Terrain loss must still recover actors with combat knockback immunity.
+        Stickman.knock_down(self, contact, speed=0.0, down=1.0, stunned=0.0)
 
     def fall_in(self, start: Vec2) -> None:
         """Appear falling from `start` onto the current anchor, e.g. from the top of the screen."""
@@ -975,7 +1131,7 @@ class Stickman(Actor):
 
     def hurt(
         self,
-        amount: int,
+        amount: float,
         point: Vec2,
         push: Vec2,
         source: str,
@@ -987,28 +1143,42 @@ class Stickman(Actor):
         shoving along `push`. At 0 HP he goes down (saying `death`) and it counts as a
         kill. `attacker`, when known, lets named heroes answer the creature that
         landed the hit. Returns True if this hit killed him."""
-        if not self.animated or self._grace.get(source, 0.0) > 0.0:
+        if not self.animated or self._grace.get(source, 0.0) > 0.0 or self.protector is not None:
             return False
         if source in HURT_GRACE:
             self._grace[source] = HURT_GRACE[source]
         self.damage += amount
+        who = attacker if attacker is not None else self._incoming_attacker
         if bleed:
-            self.world.gore.spray(point, push, 5 + 2 * min(self.damage, 8), 160.0)
+            count = 5 + round(2 * min(self.damage, 8))
+            # Labyrinth King kills throw twice the blood.
+            if (
+                self.damage >= self.max_hp
+                and source == "minotaur"
+                and getattr(who, "legendary", False)
+            ):
+                count *= 2
+            self.world.gore.spray(point, push, count, 160.0)
         if self.damage < self.max_hp:
-            self.say(f"Hit by the {source} ({self.hp}/{self.max_hp} HP)")
+            self.say(f"Hit by the {source} ({self.hp:g}/{self.max_hp} HP)")
             return False
         head = self.transforms()[self.layout.head].end
-        self.world.mark_kill(head)
-        self.go_ragdoll()
-        self.ragdoll.apply_impulse(point, push, radius=30.0)
-        self.world.kills += 1
+        self.world.record_enemy_kill(self, source, head)
         self.say(death)
         if source == "worm" and isinstance(self.weapon, Bombs):
             self.world.detonate(self.center())
             self.say("The alchemist's bombs went off in the worm's mouth!")
-        if self.thrall:
+        # Only mind-flayer thralls hatch a devourer; other dominate sources clear the flag.
+        if self.thrall and getattr(self, "mind_devoured", False):
             self.world.spawn_devourer(head)
             self.say("An intellect devourer bursts from its skull!")
+        if self.poison > 0.0:
+            # Same green-dragon poison collapse, whether a bolt tick or any killing blow.
+            self.succumb("poison")
+            return True
+        self.world.capture_adventurer_soul(self, head)
+        self.go_ragdoll()
+        self.ragdoll.apply_impulse(point, push, radius=30.0)
         return True
 
     def hurt_from(
@@ -1039,21 +1209,29 @@ class Stickman(Actor):
 
     def ignite(self) -> None:
         """Catch fire: drop, writhe, and burn until the body is gone."""
+        if self.protector is not None:
+            return
+        head = self.transforms()[self.layout.head].end
         self.go_ragdoll()
         if self.burn is None:
             self.burn = Burn()
             self.down_time = 0.0
+            self.world.capture_adventurer_soul(self, head)
 
-    def succumb(self, breath: str) -> None:
+    def succumb(self, breath: str, *, palette: str = "") -> None:
         """Die of a dragon's `breath`: "fire" burns, "poison", "lightning", "acid" and
-        "cold" are a `Demise`."""
+        "cold" are a `Demise`. `palette` tints acid deaths (e.g. "magenta")."""
+        if self.protector is not None:
+            return
         if breath == "fire":
             self.ignite()
             return
+        head = self.transforms()[self.layout.head].end
         self.go_ragdoll()
         if self.burn is None and self.demise is None:
-            self.demise = Demise(breath, self.ragdoll.pose())
+            self.demise = Demise(breath, self.ragdoll.pose(), palette=palette)
             self.down_time = 0.0
+            self.world.capture_adventurer_soul(self, head)
 
     def _succumb(self, dt: float) -> None:
         demise = self.demise

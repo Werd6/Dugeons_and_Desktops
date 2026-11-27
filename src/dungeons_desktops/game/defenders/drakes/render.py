@@ -29,6 +29,7 @@ from dungeons_desktops.game.effects.render import (
     GAS,
     GAS_YOUNG,
 )
+from dungeons_desktops.render.chromatic import chromatic_appearance
 from dungeons_desktops.render.effects import FLAME_HOT, FLAME_MID
 from dungeons_desktops.render.primitives import qt, world_pen
 
@@ -39,6 +40,9 @@ STRING = QColor(230, 226, 210)
 SHAFT = QColor(170, 130, 85)
 STEEL = QColor(205, 210, 220)
 FLETCH = QColor(220, 70, 60)
+GOLD_SHAFT = QColor(196, 148, 42)
+GOLD_FLETCH = QColor(255, 230, 140)
+GOLD_TIP = QColor(255, 214, 74)
 TRAP_IRON = QColor(90, 92, 100)
 TRAP_STEEL = QColor(170, 176, 186)
 BOLT_COLOURS = {
@@ -50,6 +54,8 @@ BOLT_COLOURS = {
 }
 """Each breath's bolt and blast: outer glow, hot core."""
 KOBOLD_EYE = QColor(250, 220, 90)
+LEGENDARY_GOLD = QColor(255, 210, 82)
+CHROMATIC_SHEEN = QColor(230, 220, 255)
 
 
 def draw_drakes(painter: QPainter, drakes: Iterable[Drake], outline: QColor | None = None) -> None:
@@ -57,6 +63,7 @@ def draw_drakes(painter: QPainter, drakes: Iterable[Drake], outline: QColor | No
         draw_drake(painter, drake, outline)
 
 
+@chromatic_appearance
 def draw_drake(painter: QPainter, drake: Drake, outline: QColor | None = None) -> None:
     """Far wing and leg, tail, body, neck and head, the kobold, near leg, near wing."""
     p = DRAGON_PALETTES.get(drake.variant, DRAGON_PALETTES["red"])
@@ -65,6 +72,13 @@ def draw_drake(painter: QPainter, drake: Drake, outline: QColor | None = None) -
     near = next(leg for leg in drake.legs if leg.near)
     far = next(leg for leg in drake.legs if not leg.near)
     rider = None if drake.dead else _Kobold(drake)
+    scale = getattr(drake, "size", 1.0)
+    painter.save()
+    if abs(scale - 1.0) > 1e-6:
+        origin = qt(drake.body)
+        painter.translate(origin)
+        painter.scale(scale, scale)
+        painter.translate(-origin.x(), -origin.y())
 
     _draw_wing(painter, drake, p, near=False)
     if outline is not None:
@@ -103,6 +117,12 @@ def draw_drake(painter: QPainter, drake: Drake, outline: QColor | None = None) -
     painter.setPen(world_pen(p.skin, 3.4))
     painter.drawLine(qt(drake.neck_base), qt(drake.head))
     _draw_dragon_head(painter, drake, HEAD_SCALE)
+    if outline is None and getattr(drake, "legendary", False):
+        shimmer = 0.55 + 0.45 * math.sin(drake.clock * 3.2 + drake.slot)
+        painter.setPen(world_pen(QColor(230, 220, 255, int(150 * shimmer)), 1.0))
+        painter.drawLine(qt(drake.hip + drake.local(Vec2(0.0, -3.2))), qt(drake.chest))
+        painter.setPen(world_pen(QColor(255, 185, 90, int(110 * shimmer)), 0.7))
+        painter.drawLine(qt(drake.neck_base), qt(drake.head))
 
     if rider is not None:
         rider.draw(painter, p)
@@ -111,6 +131,7 @@ def draw_drake(painter: QPainter, drake: Drake, outline: QColor | None = None) -
     _draw_wing(painter, drake, p, near=True)
     if rider is not None:
         rider.draw_bow(painter, p)
+    painter.restore()
     draw_missiles(painter, drake)
 
 
@@ -121,6 +142,7 @@ def draw_kobolds(
         draw_kobold(painter, kobold, outline)
 
 
+@chromatic_appearance
 def draw_kobold(painter: QPainter, kobold: Kobold, outline: QColor | None = None) -> None:
     """A kobold on foot: the rider's body, standing on his own two legs."""
     p = DRAGON_PALETTES.get(kobold.variant, DRAGON_PALETTES["red"])
@@ -129,18 +151,23 @@ def draw_kobold(painter: QPainter, kobold: Kobold, outline: QColor | None = None
         figure.strokes(painter, outline, 1.4)
     figure.draw(painter, p)
     figure.draw_bow(painter, p)
-    draw_arrows(painter, kobold.arrows)
+    draw_arrows(painter, kobold.arrows, gold=True)
 
 
-def draw_arrows(painter: QPainter, arrows: Iterable[Missile]) -> None:
+def draw_arrows(
+    painter: QPainter, arrows: Iterable[Missile], *, gold: bool = False
+) -> None:
+    shaft, fletch, tip = (
+        (GOLD_SHAFT, GOLD_FLETCH, GOLD_TIP) if gold else (SHAFT, FLETCH, STEEL)
+    )
     for arrow in arrows:
         along = arrow.velocity.normalized()
         tail = arrow.position - along * 6.0
-        painter.setPen(world_pen(SHAFT, 0.7))
+        painter.setPen(world_pen(shaft, 0.7))
         painter.drawLine(qt(tail), qt(arrow.position))
-        painter.setPen(world_pen(FLETCH, 0.9))
+        painter.setPen(world_pen(fletch, 0.9))
         painter.drawLine(qt(tail), qt(tail + along * 1.5))
-        painter.setPen(world_pen(STEEL, 1.0))
+        painter.setPen(world_pen(tip, 1.0))
         painter.drawLine(qt(arrow.position), qt(arrow.position + along * 1.2))
 
 
@@ -356,6 +383,12 @@ class _Kobold:
         )
         painter.setPen(world_pen(SADDLE, 0.8))
         painter.drawLine(qt(self.shoulder - ahead * 1.0), qt(self.seat + ahead * 1.0 + up * 1.2))
+        if getattr(self.drake, "legendary", False):
+            painter.setPen(world_pen(LEGENDARY_GOLD, 0.75))
+            painter.drawLine(
+                qt(self.shoulder - ahead * 1.1 + up * 0.3),
+                qt(self.seat + ahead * 1.0 + up * 1.2),
+            )
 
         head = self.head
         painter.setPen(world_pen(p.horn, 0.8))
@@ -379,6 +412,9 @@ class _Kobold:
         painter.drawEllipse(qt(head + ahead * 0.6 + up * 0.5), 0.55, 0.55)
         painter.setBrush(OUTLINE)
         painter.drawEllipse(qt(head + ahead * 0.75 + up * 0.5), 0.25, 0.25)
+        if getattr(self.drake, "legendary", False):
+            painter.setBrush(LEGENDARY_GOLD)
+            painter.drawEllipse(qt(head - ahead * 0.2 + up * 1.6), 0.7, 0.45)
 
         knee, foot = self.legs[0]
         painter.setPen(world_pen(skin, 1.4))

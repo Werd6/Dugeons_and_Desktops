@@ -241,7 +241,7 @@ def test_when_its_lizard_dies_the_drow_leaps_off_and_cuts_his_way_in_on_foot():
     assert lizard.dead and not lizard.mounted and lizard in world.fallen
     assert len(world.drow) == 1
     drow = world.drow[0]
-    assert isinstance(drow, Drow) and drow in world.monsters()
+    assert isinstance(drow, Drow) and drow.cloaked and drow not in world.monsters()
     heights = []
     run(world, 1.5, each=lambda: heights.append(drow.contact().y))
     assert any(abs(y - 600.0) < 0.5 for y in heights), "he lands on the window top"
@@ -249,7 +249,23 @@ def test_when_its_lizard_dies_the_drow_leaps_off_and_cuts_his_way_in_on_foot():
     man.stop()
     hits = unkillable(man)
     run(world, 12.0, until=lambda: len(hits) >= 4)
+    assert not drow.cloaked and drow in world.monsters()
     assert len([h for h in hits if h[1] == "drow"]) >= 4, "two cuts a swing"
+
+
+def test_poisoned_kills_use_the_green_dragon_demise():
+    world = SimWorld([], 800.0, 1400.0, ceiling=0.0, seed=2)
+    man = world.add_stickman(Vec2(400, 800))
+    man.poison_for(5.0)
+    assert man.hurt(man.max_hp, man.center(), Vec2(0.0, -10.0), "goblin", "Poisoned through!")
+    assert not man.animated and man.demise is not None and man.demise.kind == "poison"
+
+
+def test_house_assassins_is_the_drow_legendary_name():
+    from dungeons_desktops.game.defenders.legendary import legendary_name
+    from dungeons_desktops.game.unlocks import LEGENDARY_NAMES
+
+    assert legendary_name("drow") == LEGENDARY_NAMES["drow"] == "House Assassins"
 
 
 def test_on_foot_the_drow_are_quicker_than_goblins():

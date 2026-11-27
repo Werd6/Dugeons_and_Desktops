@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import replace
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QRadialGradient
@@ -32,6 +33,7 @@ from dungeons_desktops.game.defenders.lich.actor import (
     Lich,
 )
 from dungeons_desktops.game.defenders.minotaur.render import Ink, _alpha, _pen, _qt, _smooth, _taper
+from dungeons_desktops.render.chromatic import chromatic_appearance
 
 ROBE = QColor(26, 24, 32)
 ROBE_LIGHT = QColor(52, 50, 64)
@@ -47,6 +49,13 @@ GEM = QColor(70, 232, 112)
 FLAME = QColor(70, 226, 96)
 FLAME_CORE = QColor(212, 255, 196)
 GLOW = QColor(90, 255, 140)
+ARCHLICH_VIOLET = QColor(142, 82, 214)
+ARCHLICH_GOLD = QColor(255, 226, 116)
+ARCHLICH_EYE = QColor(255, 110, 220)
+ARCHLICH_FLAME = QColor(255, 96, 210)
+ARCHLICH_FLAME_CORE = QColor(255, 210, 240)
+ARCHLICH_GLOW = QColor(255, 140, 230)
+ARCHLICH_LINING = QColor(255, 214, 96)
 DEAD_EYE = QColor(40, 60, 40)
 CRACKLE = QColor(214, 255, 236)
 
@@ -69,6 +78,7 @@ DOOR_HEIGHT = 54.0
 MOTES = 14
 
 
+@chromatic_appearance
 def draw_lich(painter: QPainter, lich: Lich, outline: QColor | None = None) -> None:
     joints = lich.joints() if not lich.dead else None
     door = lich.door if not lich.dead else None
@@ -98,6 +108,16 @@ def draw_liches(painter: QPainter, liches, outline: QColor | None = None) -> Non
 
 def _ease(t: float) -> float:
     return smoothstep(clamp(t, 0.0, 1.0))
+
+
+def draw_dimension_door(painter: QPainter, door: Door, scale: float = 1.0) -> None:
+    """Share the Lich's two opening doors and dissolving motes with other casters."""
+    painter.save()
+    painter.scale(scale, scale)
+    scaled = replace(door, origin=door.origin / scale, target=door.target / scale)
+    _doors(painter, scaled)
+    _door_motes(painter, scaled)
+    painter.restore()
 
 
 def _doors(painter: QPainter, door: Door) -> None:
@@ -367,6 +387,9 @@ def _skull(
     eyes: float,
     crown: bool = True,
     jaw: float = 0.0,
+    *,
+    eye: QColor = EYE,
+    glow: QColor = GLOW,
 ) -> None:
     """The skull at `center`, turned `yaw` (as in `Lich.yaw`) and tilted `angle`."""
     cos_y, sin_y = math.cos(yaw), math.sin(yaw)
@@ -400,17 +423,17 @@ def _skull(
             size = smoothstep(clamp((facing + 0.2) / 0.5, 0.0, 1.0))
             if size <= 0.01:
                 continue
-            eye = at(2.3, side * 2.1, -0.4)
+            socket = at(2.3, side * 2.1, -0.4)
             painter.setBrush(SOCKET)
-            painter.drawEllipse(_qt(eye), 2.0 * size, 2.2 * size)
+            painter.drawEllipse(_qt(socket), 2.0 * size, 2.2 * size)
             if eyes > 0.0:
-                glow = QRadialGradient(_qt(eye), 2.4 * size)
-                glow.setColorAt(0.0, _alpha(GLOW, 130 * eyes))
-                glow.setColorAt(1.0, _alpha(GLOW, 0))
-                painter.setBrush(glow)
-                painter.drawEllipse(_qt(eye), 2.4 * size, 2.4 * size)
-                painter.setBrush(_alpha(EYE, 255 * eyes))
-                painter.drawEllipse(_qt(eye), 0.75 * size, 0.75 * size)
+                aura = QRadialGradient(_qt(socket), 2.4 * size)
+                aura.setColorAt(0.0, _alpha(glow, 130 * eyes))
+                aura.setColorAt(1.0, _alpha(glow, 0))
+                painter.setBrush(aura)
+                painter.drawEllipse(_qt(socket), 2.4 * size, 2.4 * size)
+                painter.setBrush(_alpha(eye, 255 * eyes))
+                painter.drawEllipse(_qt(socket), 0.75 * size, 0.75 * size)
     if crown:
         _crown(ink, center + Vec2(-0.4, -4.4).rotated(angle), angle + 0.08)
 
@@ -444,16 +467,26 @@ def _crown(ink: Ink, base: Vec2, angle: float) -> None:
             painter.drawEllipse(_qt(at(x, -1.7)), 0.7, 0.7)
 
 
-def _flame(ink: Ink, base: Vec2, t: float, size: float, lean: float) -> None:
+def _flame(
+    ink: Ink,
+    base: Vec2,
+    t: float,
+    size: float,
+    lean: float,
+    *,
+    flame: QColor = FLAME,
+    core: QColor = FLAME_CORE,
+    glow: QColor = GLOW,
+) -> None:
     if size <= 0.02 or not ink.detail:
         return
     painter = ink.painter
-    glow = QRadialGradient(_qt(base + Vec2(0.0, -3.0 * size)), 14.0 * size)
-    glow.setColorAt(0.0, _alpha(GLOW, 120))
-    glow.setColorAt(0.5, _alpha(GLOW, 40))
-    glow.setColorAt(1.0, _alpha(GLOW, 0))
+    aura = QRadialGradient(_qt(base + Vec2(0.0, -3.0 * size)), 14.0 * size)
+    aura.setColorAt(0.0, _alpha(glow, 120))
+    aura.setColorAt(0.5, _alpha(glow, 40))
+    aura.setColorAt(1.0, _alpha(glow, 0))
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(glow)
+    painter.setBrush(aura)
     painter.drawEllipse(_qt(base + Vec2(0.0, -3.0 * size)), 14.0 * size, 14.0 * size)
     flick = 1.1 * math.sin(t * 11.0) + 0.6 * math.sin(t * 17.3 + 1.0) + lean
     tall = 1.0 + 0.12 * math.sin(t * 13.0) + 0.08 * math.sin(t * 7.1)
@@ -469,16 +502,27 @@ def _flame(ink: Ink, base: Vec2, t: float, size: float, lean: float) -> None:
             base + Vec2((-2.4 + 0.4 * flick) * s, -4.6 * s + drop),
         ]
 
-    painter.setBrush(FLAME)
+    painter.setBrush(flame)
     painter.drawPath(_smooth(body(1.0, 0.0)))
-    painter.setBrush(FLAME_CORE)
+    painter.setBrush(core)
     painter.drawPath(_smooth(body(0.55, 0.8 * size)))
     for k in range(4):
         age = (t * 0.9 + k / 4.0) % 1.0
         x = math.sin(k * 7.3 + t * 3.0) * 2.5 + flick * age
         ember = base + Vec2(x * size, -(6.0 + age * 12.0) * size)
-        painter.setBrush(_alpha(FLAME_CORE if k % 2 else FLAME, 230 * (1.0 - age)))
+        painter.setBrush(_alpha(core if k % 2 else flame, 230 * (1.0 - age)))
         painter.drawEllipse(_qt(ember), 0.7 * size, 0.7 * size)
+
+
+def draw_palm_flame(
+    painter: QPainter,
+    base: Vec2,
+    t: float,
+    size: float = 0.55,
+    lean: float = 0.0,
+) -> None:
+    """The lich's palm-flame, for skeleton mages and other casters that share it."""
+    _flame(Ink(painter), base, t, size, lean)
 
 
 def _motes(painter: QPainter, lich: Lich, root: Vec2) -> None:
@@ -513,13 +557,30 @@ def _paint(ink: Ink, lich: Lich, joints: Joints | None) -> None:
         _arm(ink, joints.shoulders[1], joints.elbows[1], joints.hands[1], fdir, up=False)
     if not joints.flame_front:
         _arm(ink, joints.shoulders[0], joints.elbows[0], joints.hands[0], fdir, up=True)
+    legendary = getattr(lich, "legendary", False)
     for flap in _collar(lich, root):
         _rimmed(ink, _smooth(flap), ROBE)
     robe = _robe_outline(lich, root, 0.0)
     _rimmed(ink, _smooth(robe), ROBE)
     if ink.detail:
         _robe_detail(ink.painter, lich, root, forward)
-    _skull(ink, joints.skull, joints.tilt * fdir, yaw, 1.0, jaw=joints.jaw)
+        if legendary:
+            glow = QRadialGradient(_qt(joints.skull + Vec2(0.0, -5.0)), 18.0)
+            glow.setColorAt(0.0, _alpha(ARCHLICH_GOLD, 105))
+            glow.setColorAt(1.0, _alpha(ARCHLICH_GOLD, 0))
+            ink.painter.setPen(Qt.PenStyle.NoPen)
+            ink.painter.setBrush(glow)
+            ink.painter.drawEllipse(_qt(joints.skull + Vec2(0.0, -5.0)), 18.0, 18.0)
+    _skull(
+        ink,
+        joints.skull,
+        joints.tilt * fdir,
+        yaw,
+        1.0,
+        jaw=joints.jaw,
+        eye=ARCHLICH_EYE if legendary else EYE,
+        glow=ARCHLICH_GLOW if legendary else GLOW,
+    )
     if not far_arm:
         _arm(ink, joints.shoulders[1], joints.elbows[1], joints.hands[1], fdir, up=False)
     if joints.flame_front:
@@ -530,7 +591,18 @@ def _paint(ink: Ink, lich: Lich, joints: Joints | None) -> None:
         tip = knuckle + Vec2(fdir * 4.8 * joints.finger, -0.6 * joints.finger)
         ink.limb([knuckle, tip], [1.2, 0.8], BONE)
     size = 0.8 + 0.7 * clamp(lich.flare.value, 0.0, 1.2)
-    _flame(ink, joints.flame, lich.time, size, clamp(-lich.drag.value * 0.04, -1.5, 1.5))
+    if legendary:
+        size *= 1.3
+    _flame(
+        ink,
+        joints.flame,
+        lich.time,
+        size,
+        clamp(-lich.drag.value * 0.04, -1.5, 1.5),
+        flame=ARCHLICH_FLAME if legendary else FLAME,
+        core=ARCHLICH_FLAME_CORE if legendary else FLAME_CORE,
+        glow=ARCHLICH_GLOW if legendary else GLOW,
+    )
     if ink.detail and joints.crackle > 0.02:
         _crackle(ink.painter, joints.hands[0], joints.hands[1], fdir, lich.time, joints.crackle)
 
@@ -564,7 +636,8 @@ def _robe_detail(painter: QPainter, lich: Lich, root: Vec2, forward: float) -> N
     mid = lich.project(0.0, 0.0, -16.0, root) + Vec2(shift * 0.9 + trail * 0.2, 0.0)
     bottom = root + Vec2(shift + trail * 0.6, -3.5)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(ROBE_LIGHT)
+    lining = ARCHLICH_LINING if getattr(lich, "legendary", False) else ROBE_LIGHT
+    painter.setBrush(lining)
     painter.drawPath(
         _smooth(
             [
@@ -581,6 +654,10 @@ def _robe_detail(painter: QPainter, lich: Lich, root: Vec2, forward: float) -> N
     a = lich.project(0.0, 0.0, -20.0, root) + Vec2(-2.6 - shift * 0.3, 0.0)
     b = root + Vec2(-4.0 - shift * 0.2 + trail * 0.5, -4.0)
     painter.drawLine(_qt(a), _qt(b))
+    if getattr(lich, "legendary", False):
+        pulse = 0.7 + 0.3 * math.sin(lich.time * 2.4)
+        painter.setPen(_pen(_alpha(ARCHLICH_VIOLET, 170 * pulse), 1.2))
+        painter.drawLine(_qt(top), _qt(bottom))
 
 
 def _paint_dead(ink: Ink, lich: Lich) -> None:
@@ -599,7 +676,17 @@ def _paint_dead(ink: Ink, lich: Lich) -> None:
             hand_bit = bit
     if hand_bit is not None and lich.flame > 0.0:
         sputter = 0.75 + 0.25 * math.sin(lich.time * 31.0)
-        _flame(ink, hand_bit.position + Vec2(0.0, -2.5), lich.time, lich.flame * sputter, 0.0)
+        legendary = getattr(lich, "legendary", False)
+        _flame(
+            ink,
+            hand_bit.position + Vec2(0.0, -2.5),
+            lich.time,
+            lich.flame * sputter,
+            0.0,
+            flame=ARCHLICH_FLAME if legendary else FLAME,
+            core=ARCHLICH_FLAME_CORE if legendary else FLAME_CORE,
+            glow=ARCHLICH_GLOW if legendary else GLOW,
+        )
 
 
 def _bit(ink: Ink, lich: Lich, bit: Bit) -> None:

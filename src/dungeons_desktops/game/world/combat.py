@@ -8,13 +8,13 @@ from dungeons_desktops.game.adventurers.actor import (
     Stickman,
 )
 from dungeons_desktops.game.adventurers.combat import ADVENTURER_DAMAGE
+from dungeons_desktops.game.defenders.aboleth.actor import Aboleth
 from dungeons_desktops.game.defenders.chimera.actor import Chimera
 from dungeons_desktops.game.defenders.displacer.actor import Displacer
 from dungeons_desktops.game.defenders.dragon.actor import BODY_LENGTH, Dragon
 from dungeons_desktops.game.defenders.drakes.drake import Drake
 from dungeons_desktops.game.defenders.drakes.kobold import Kobold
 from dungeons_desktops.game.defenders.drow.actor import Drow, Lizard
-from dungeons_desktops.game.defenders.elementals.actor import Elemental
 from dungeons_desktops.game.defenders.goblins.actor import Goblin
 from dungeons_desktops.game.defenders.hydra.actor import Hydra
 from dungeons_desktops.game.defenders.lich.actor import Lich
@@ -22,7 +22,6 @@ from dungeons_desktops.game.defenders.mimic.actor import Mimic
 from dungeons_desktops.game.defenders.mindflayer.actor import MindFlayer
 from dungeons_desktops.game.defenders.mindflayer.devourer import Devourer
 from dungeons_desktops.game.defenders.minotaur.actor import Minotaur
-from dungeons_desktops.game.defenders.ooze.actor import Ooze
 from dungeons_desktops.game.defenders.worm.actor import Worm, WormMode
 
 MISSILE_BOXES: tuple[Rect, ...] = ()
@@ -40,10 +39,10 @@ class CombatMixin:
     def _spear_hits(self, point: Vec2) -> Stickman | None:
         return next((s for s in self.stickmen if s.prey and s.hits(point, 1.0)), None)
 
-    def _vial_hits(self, point: Vec2, hostile: bool) -> bool:
+    def _vial_hits(self, point: Vec2, hostile: bool) -> object | None:
         if hostile:
-            return self.prey_at(point) is not None
-        return self.monster_at(point) is not None
+            return self.prey_at(point)
+        return self.monster_at(point)
 
     # ----- a thrall's spells, arrows and bombs, aimed at the free adventurers ----
 
@@ -93,6 +92,8 @@ class CombatMixin:
         worms = [w for w in self.worms if w.mode is WormMode.LEAP]
         return [
             *self.goblins,
+            *self.graveknights,
+            *self.zombies,
             *self.skeletons,
             *self.dragons,
             *worms,
@@ -100,31 +101,42 @@ class CombatMixin:
             *self.devourers,
             *self.displacers,
             *self.minotaurs,
-            *self.oozes,
+            *self.aboleths,
             *self.chimeras,
-            *[e for e in self.elementals if e.visible],
             *[lich for lich in self.liches if not lich.phased],
             *[mimic for mimic in self.mimics if mimic.revealed],
             *[hydra for hydra in self.hydras if hydra.visible],
             *self.drakes,
             *self.kobolds,
             *self.lizards,
-            *self.drow,
+            *[drow for drow in self.drow if not getattr(drow, "cloaked", False)],
             *self.illusions(),
             *self.thralls,
         ]
 
     def illusions(self) -> list[Displacer]:
         """The displacer beasts' illusions that are out (to the adventurers, monsters)."""
-        return [d.ghost for d in self.displacers if d.ghost is not None and d.ghost.feinting]
+        return [
+            ghost
+            for displacer in self.displacers
+            for ghost in (displacer.ghost, getattr(displacer, "ghost2", None))
+            if ghost is not None and ghost.feinting
+        ]
 
     def locate(self, monster: object) -> Vec2 | None:
         """Where to aim at `monster`, or None if it's gone (or back underground)."""
         if isinstance(monster, Lizard):
             return monster.center() if monster in self.lizards else None
         if isinstance(monster, Drow):
-            return monster.center() if monster in self.drow else None
-        if isinstance(monster, Goblin) and (monster in self.goblins or monster in self.skeletons):
+            if monster not in self.drow or getattr(monster, "cloaked", False):
+                return None
+            return monster.center()
+        if isinstance(monster, Goblin) and monster in (
+            *self.goblins,
+            *self.graveknights,
+            *self.skeletons,
+            *self.zombies,
+        ):
             return monster.center()
         if isinstance(monster, Dragon) and monster in self.dragons:
             return monster.body
@@ -140,11 +152,9 @@ class CombatMixin:
             return monster.center()
         if isinstance(monster, Minotaur) and monster in self.minotaurs:
             return monster.center()
-        if isinstance(monster, Ooze) and monster in self.oozes:
+        if isinstance(monster, Aboleth) and monster in self.aboleths:
             return monster.center()
         if isinstance(monster, Chimera) and monster in self.chimeras:
-            return monster.center()
-        if isinstance(monster, Elemental) and monster in self.elementals and monster.visible:
             return monster.center()
         if isinstance(monster, Lich) and monster in self.liches and not monster.phased:
             return monster.center()
@@ -199,7 +209,17 @@ class CombatMixin:
             parts = [monster.body, monster.shoulder, monster.hip, monster.neck_base, monster.head]
         elif isinstance(
             monster,
-            (Displacer, Minotaur, Ooze, Chimera, Elemental, Lich, Mimic, Hydra, Drake, Kobold),
+            (
+                Displacer,
+                Minotaur,
+                Chimera,
+                Aboleth,
+                Lich,
+                Mimic,
+                Hydra,
+                Drake,
+                Kobold,
+            ),
         ):
             parts = monster.parts()
         elif isinstance(monster, Worm):
@@ -213,7 +233,15 @@ class CombatMixin:
 
     def monster_at(self, point: Vec2) -> object | None:
         """The live monster whose body covers `point`, if any."""
-        for goblin_ in [*self.goblins, *self.skeletons, *self.drow]:
+        for goblin_ in [
+            *self.goblins,
+            *self.graveknights,
+            *self.zombies,
+            *self.skeletons,
+            *self.drow,
+        ]:
+            if getattr(goblin_, "cloaked", False):
+                continue
             if goblin_.hits(point, margin=1.5):
                 return goblin_
         for lizard in self.lizards:
@@ -241,15 +269,12 @@ class CombatMixin:
         for minotaur in self.minotaurs:
             if minotaur.hits(point, margin=1.0):
                 return minotaur
-        for ooze in self.oozes:
-            if ooze.hits(point, margin=1.0):
-                return ooze
+        for aboleth in self.aboleths:
+            if aboleth.hits(point, margin=1.0):
+                return aboleth
         for chimera in self.chimeras:
             if chimera.hits(point, margin=1.0):
                 return chimera
-        for elemental in self.elementals:
-            if elemental.hits(point, margin=1.0):
-                return elemental
         for lich in self.liches:
             if lich.hits(point, margin=1.0):
                 return lich
@@ -276,7 +301,7 @@ class CombatMixin:
     def hurt_monster(
         self,
         monster: object,
-        amount: int,
+        amount: float,
         point: Vec2,
         push: Vec2,
         ranged: bool = False,
@@ -290,7 +315,11 @@ class CombatMixin:
             if monster not in self.thralls:
                 return False
             self.spells.sparkle(point, "hit", 7, 120.0)
-            return monster.hurt(amount, point, push, "adventurer", "Cut down by its friends!")
+            killed = monster.hurt(amount, point, push, "adventurer", "Cut down by its friends!")
+            if killed:
+                self.chromatic.shatter(monster, point, push)
+                self._credit_kill(attacker, monster)
+            return killed
         if isinstance(monster, Displacer) and monster.illusion:
             if monster.feinting:
                 monster.ripple(point)
@@ -302,10 +331,6 @@ class CombatMixin:
             return False
         if isinstance(monster, Hydra) and not monster.visible:
             return False
-        if isinstance(monster, Elemental):
-            if not monster.vulnerable:
-                return False
-            amount = min(amount, monster.form_hp)
         alive = self._live_list(monster)
         if alive is None:
             return False
@@ -314,18 +339,33 @@ class CombatMixin:
         monster.damage += amount
         self.spells.sparkle(point, "hit", 7, 120.0)
         if monster.hp > 0:
-            if isinstance(monster, Elemental):
-                monster.wounded()
             return False
         alive.remove(monster)
         monster.die(point, push)
+        # Aboleths slip into a deep portal — no corpse shatter.
+        if not isinstance(monster, Aboleth):
+            self.chromatic.shatter(monster, point, push)
         self.fallen.append(monster)
         self.monster_kills += 1
+        if isinstance(monster, Goblin):
+            # Individual bodies, including king recruits — not whole pack dismissals.
+            self.progression.record_defender_death("goblin")
+        self._credit_kill(attacker, monster)
+        if (on_killed_by := getattr(monster, "on_killed_by", None)) is not None:
+            on_killed_by(attacker)
         return True
+
+    @staticmethod
+    def _credit_kill(attacker: object, victim: object) -> None:
+        """Notify the owner of a confirmed kill, including hits from their projectiles."""
+        if (on_kill := getattr(attacker, "on_kill", None)) is not None:
+            on_kill(victim)
 
     def _live_list(self, monster: object) -> list | None:
         for alive in (
             self.goblins,
+            self.graveknights,
+            self.zombies,
             self.skeletons,
             self.dragons,
             self.worms,
@@ -333,9 +373,8 @@ class CombatMixin:
             self.devourers,
             self.displacers,
             self.minotaurs,
-            self.oozes,
+            self.aboleths,
             self.chimeras,
-            self.elementals,
             self.liches,
             self.mimics,
             self.hydras,
@@ -347,4 +386,3 @@ class CombatMixin:
             if monster in alive:
                 return alive
         return None
-

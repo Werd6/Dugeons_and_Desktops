@@ -10,11 +10,19 @@ has three powers, one at a time, standing still for each:
 
 - Mind blast: from range, a slow purple bolt that homes in on him, does
   `BLAST_DAMAGE` (none, by default) and paralyses him for `BLAST_STUN` seconds.
+  As the Elder Thing Herald (legendary), it then blinks onto the victim and starts a
+  tentacle grab immediately.
 - Tentacle grab: on a paralysed adventurer within reach, its face tentacles seize his
   head for `GRAB_TIME`; if he's still there at the end it plants an intellect
   devourer in his skull and he becomes its thrall (`Stickman.enthrall`).
 - Psychic pulse: when anyone free gets close, a ring bursts out of it that flings
   everyone nearby flat and leaves them paralysed when they get up.
+
+With three living thralls, the legendary flayer binds them into a ritual: they gather
+at one spot, erupt in a psychic pulse, and tear open a rift. The rift is a sentry:
+when prey (or a thrall) strays near, a tentacle lashes out, seizes them, and hauls
+them through. After five meals an aboleth swims out and the tear closes. Thralls do
+not open another rift until that aboleth is banished back through a deep portal.
 
 With `MIND_FLAYER_HP` gone it collapses as a ragdoll.
 """
@@ -25,12 +33,13 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 
-from dungeons_desktops.core.geometry import Vec2
+from dungeons_desktops.core.geometry import Vec2, clamp
 from dungeons_desktops.game.actors.floating import Floater
 from dungeons_desktops.game.actors.hunting import nearest
 from dungeons_desktops.game.actors.mortal import Mortal
 from dungeons_desktops.game.adventurers import model as stick_figure
 from dungeons_desktops.game.adventurers.actor import Stickman
+from dungeons_desktops.game.defenders.mindflayer.rift import Rift, update_rift
 from dungeons_desktops.game.world.api import World
 from dungeons_desktops.navigation.planner import Anchor
 from dungeons_desktops.rig.biped import UP
@@ -76,8 +85,13 @@ GRAB_HEIGHT = 24.0
 GRAB_TIME = 1.1
 GRAB_SLACK = 1.5
 """How far past `GRAB_REACH` a victim may drift before the grab breaks."""
-
-
+BLINK_OFFSET = 14.0
+"""How far beside a stunned victim the legendary flayer blinks in."""
+RITUAL_THRALLS = 3
+RITUAL_ARRIVE = 28.0
+"""How close each thrall must be to the gathering point before the pulse."""
+RITUAL_PULSE_TIME = 0.7
+RITUAL_PULSE_RADIUS = 110.0
 class Power(Enum):
     BLAST = "blast"
     PULSE = "pulse"
@@ -132,9 +146,29 @@ class MindFlayer(Floater, Mortal):
         self.bolts: list[Bolt] = []
         self.waves: list[Wave] = []
         self.thralls = 0
+        self.ritual_point: Vec2 | None = None
+        self.ritual_thralls: list[Stickman] = []
+        self.ritual_pulse_age: float | None = None
+        self.rifts: list[Rift] = []
+        self.herald_aboleth = None
+        """Living or banishing aboleth delivered by this flayer's rift, if any."""
         self.float_time = world.random.uniform(0.0, math.tau)
         self.ragdoll: Ragdoll | None = None
         self._pose = self._float_pose()
+
+    @property
+    def rift(self) -> Rift | None:
+        """Newest open rift (for render/tests that expect a single tear)."""
+        return self.rifts[-1] if self.rifts else None
+
+    # Back-compat for anything still poking at the old Herald summon.
+    @property
+    def herald(self):
+        return None
+
+    @property
+    def elder_brain(self):
+        return None
 
     def pose(self) -> Pose:
         return self.ragdoll.pose() if self.ragdoll is not None else self._pose
@@ -154,6 +188,7 @@ class MindFlayer(Floater, Mortal):
 
     def update(self, dt: float) -> None:
         self.float_time += dt
+        self._update_ritual(dt)
         self._replan_if_needed()
         self.blast_cooldown -= dt
         self.pulse_cooldown -= dt
@@ -174,6 +209,124 @@ class MindFlayer(Floater, Mortal):
         self._track_velocity(dt)
         self._update_bolts(dt)
         self._update_waves(dt)
+
+    # ----- thrall ritual → Elder Thing Herald ---------------------------------
+
+    def _update_ritual(self, dt: float) -> None:
+        """Legendary: one thrall triad opens a sentry rift; after it delivers an aboleth,
+        further rituals wait until that aboleth is banished."""
+        if not getattr(self, "legendary", False):
+            return
+        self.rifts = [rift for rift in self.rifts if update_rift(rift, dt, self.world, self)]
+
+        if self.ritual_pulse_age is not None:
+            self.ritual_pulse_age += dt
+            if self.ritual_pulse_age >= RITUAL_PULSE_TIME:
+                self._detonate_ritual()
+            return
+
+        if self.ritual_point is None:
+            self._try_start_ritual()
+            return
+
+        living = [
+            thrall
+            for thrall in self.ritual_thralls
+            if thrall.thrall and thrall.animated and thrall in self.world.stickmen
+        ]
+        self.ritual_thralls = living
+        if len(living) < RITUAL_THRALLS:
+            # Need a full triad again.
+            for thrall in living:
+                thrall.ritual_bound = False
+                thrall.ritual_goal = None
+            self.ritual_point = None
+            self.ritual_thralls = []
+            return
+
+        for thrall in living:
+            thrall.ritual_bound = True
+            thrall.ritual_goal = self.ritual_point
+            if thrall.goal != self.ritual_point:
+                thrall.goal = self.ritual_point
+                if not thrall.follower.in_transition:
+                    thrall.replan()
+
+        arrived = all(
+            thrall.contact().distance_to(self.ritual_point) <= RITUAL_ARRIVE for thrall in living
+        )
+        if arrived:
+            self.ritual_pulse_age = 0.0
+            self.waves.append(Wave(self.ritual_point))
+            self.world.spells.pulse(self.ritual_point, RITUAL_PULSE_RADIUS)
+            self.world.spells.sparkle(self.ritual_point, "magic", 28, 220.0)
+
+    def _try_start_ritual(self) -> None:
+        # One rift / one aboleth at a time: no further tears until the aboleth is banished.
+        if self.rifts or self.herald_aboleth is not None:
+            return
+        # Skip thralls already bound to a gathering so leftovers can form the next triad.
+        thralls = [t for t in self.world.thralls if not t.ritual_bound][:RITUAL_THRALLS]
+        if len(thralls) < RITUAL_THRALLS:
+            return
+        point = self._pick_ritual_point(thralls)
+        self.ritual_point = point
+        self.ritual_thralls = thralls
+        for thrall in thralls:
+            thrall.ritual_bound = True
+            thrall.ritual_goal = point
+            thrall.goal = point
+            thrall.halt()
+            if thrall.weapon is not None:
+                thrall.weapon.cancel()
+            thrall.replan()
+
+    def spawn_aboleth_from_rift(self, rift: Rift) -> None:
+        """Fifth meal: an aboleth swims through the tear into the world."""
+        if self.herald_aboleth is not None:
+            return
+        facing = 1 if rift.center.x < self.world.width * 0.5 else -1
+        aboleth = self.world.add_aboleth(rift.center + Vec2(0.0, -18.0), facing=facing)
+        aboleth.begin_emergence(rift.center)
+        aboleth.herald_flayer = self
+        self.herald_aboleth = aboleth
+
+    def release_aboleth(self, aboleth) -> None:
+        """Called once the herald aboleth finishes banishing through a deep portal."""
+        if self.herald_aboleth is aboleth:
+            self.herald_aboleth = None
+
+    def _pick_ritual_point(self, thralls: list[Stickman]) -> Vec2:
+        mid = sum((thrall.contact() for thrall in thralls), Vec2(0.0, 0.0)) / len(thralls)
+        world = self.world
+        x = clamp(mid.x, world.left + 80.0, world.width - 80.0)
+        # Prefer a clear floor gathering for the rift's entrance.
+        floor = Vec2(x, world.floor_y)
+        anchor = self.planner.anchor_near(floor, walk_only=True)
+        if anchor is not None:
+            return anchor.point
+        fallback = self.planner.anchor_near(mid, walk_only=True)
+        return fallback.point if fallback is not None else mid
+
+    def _detonate_ritual(self) -> None:
+        point = self.ritual_point
+        assert point is not None
+        for thrall in list(self.ritual_thralls):
+            thrall.ritual_bound = False
+            thrall.ritual_goal = None
+            if thrall.weapon is not None:
+                thrall.weapon.cancel()
+            thrall.release_limb()
+            self.world.spells.sparkle(thrall.center(), "magic", 18, 180.0)
+            if thrall in self.world.stickmen:
+                self.world.stickmen.remove(thrall)
+        self.world.spells.pulse(point, RITUAL_PULSE_RADIUS * 1.15)
+        self.world.spells.sparkle(point, "magic", 40, 280.0)
+        self.waves.append(Wave(point))
+        self.ritual_point = None
+        self.ritual_thralls = []
+        self.ritual_pulse_age = None
+        self.rifts.append(Rift(point))
 
     # ----- floating ------------------------------------------------------------
 
@@ -346,8 +499,33 @@ class MindFlayer(Floater, Mortal):
             )
             if killed:
                 return
-        if not getattr(target, "mindflayer_stun_immune", False):
-            target.paralyze(BLAST_STUN)
+        if getattr(target, "mindflayer_stun_immune", False):
+            return
+        target.paralyze(BLAST_STUN)
+        if getattr(self, "legendary", False) and target.paralysed and target.animated:
+            self._blink_and_grab(target)
+
+    def _blink_and_grab(self, target: Stickman) -> None:
+        """Legendary stun: vanish, reappear beside the victim, and begin the grab."""
+        origin = self.center()
+        self.world.spells.sparkle(origin, "magic", 16, 170.0)
+        self.world.spells.pulse(origin, 22.0)
+        contact = target.contact()
+        side = -1 if target.center().x >= origin.x else 1
+        aim = contact + Vec2(side * BLINK_OFFSET, 0.0)
+        anchor = self.planner.anchor_near(aim) or self.planner.anchor_near(contact)
+        if anchor is None:
+            return
+        self.follower.reset(anchor)
+        self.halt()
+        self.goal = None
+        self.feet = self._place(anchor.surface, anchor.point)
+        self._face(target.center())
+        self._pose = self._float_pose()
+        self.world.spells.sparkle(self.center(), "magic", 16, 170.0)
+        self.world.spells.pulse(self.center(), 22.0)
+        target.paralyze(GRAB_TIME + 0.3)
+        self._start(Power.GRAB, target)
 
     def _update_waves(self, dt: float) -> None:
         for wave in self.waves:

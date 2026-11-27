@@ -60,6 +60,7 @@ class WalkDriver:
         self.hip_height = self.layout.leg_length * 0.93
         self.speed = 0.0
         self.target_speed = 0.0
+        self.direction = 1.0
         self.cycle = 0.0
         self.time = 0.0
         self.overrides: dict[str, Vec2] = {}
@@ -123,7 +124,7 @@ class WalkDriver:
         self._advance(self.speed * dt, dt)
 
     def step_to(self, hip_x: float, dt: float) -> None:
-        """Externally driven: move the hips to `hip_x` (forward, along +x) and animate the feet."""
+        """Move to `hip_x`; a negative step backpedals while still facing +x."""
         distance = hip_x - self.hip_x
         if abs(distance) > self.settings.stride:
             self.place(hip_x, self.ground_y)
@@ -138,6 +139,7 @@ class WalkDriver:
         self.time += dt
         self.hip_x += distance
         if abs(distance) > 1e-9:
+            self.direction = 1.0 if distance > 0 else -1.0
             self.cycle = (self.cycle + abs(distance) / self.settings.stride) % 1.0
             for i, foot in enumerate(self._feet):
                 self._update_walking_foot(i, foot)
@@ -168,7 +170,9 @@ class WalkDriver:
         t = (phase - s.stance_fraction) / (1.0 - s.stance_fraction)
         remaining_hip_travel = (1.0 - t) * (1.0 - s.stance_fraction) * s.stride
         landing = Vec2(
-            self.hip_x + remaining_hip_travel + s.stance_fraction * s.stride * 0.5, self.ground_y
+            self.hip_x + self.direction * (
+                remaining_hip_travel + s.stance_fraction * s.stride * 0.5
+            ), self.ground_y,
         )
         shaped = t ** (1.0 - 0.6 * s.heel_kick)
         lift = s.step_height * math.sin(math.pi * shaped) * min(1.0, self.speed / s.speed)
@@ -196,7 +200,7 @@ class WalkDriver:
         height = self.hip_height - s.crouch * self.layout.leg_length * pace
         pose = self.pose
         pose.root = Vec2(self.hip_x, self.ground_y - height + bob)
-        pose.angles[layout.pelvis] = UP + s.lean * pace
+        pose.angles[layout.pelvis] = UP + s.lean * self.direction * pace
         pose.angles[layout.torso] = 0.04 * math.sin(4.0 * math.pi * self.cycle) * pace
         pose.angles[layout.head] = -s.lean * 0.6 * pace + 0.03 * breath
 

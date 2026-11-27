@@ -59,6 +59,17 @@ FLAME_DRAG = 0.6
 FIRE_PUSH = 350.0
 FIRE_SOURCE = "chimera's fire"
 FIRE_DEATH = "Burned by the chimera's goat!"
+FIRE_DEATHS = {
+    "goat": FIRE_DEATH,
+    "lion": "Burned by the chimera's lion!",
+    "snake": "Burned by the chimera's serpent!",
+}
+FIRE_PALETTES = {
+    "goat": "blue",
+    "lion": "orange",
+    "snake": "green",
+}
+"""Primal chimera: goat blue/white-hot, lion orange, serpent green."""
 FACING_DEADBAND = 0.15
 
 
@@ -72,7 +83,8 @@ class Fire(Enum):
 class GoatHead:
     """Where the goat aims (a world direction) and the fire it has breathed."""
 
-    def __init__(self) -> None:
+    def __init__(self, kind: str = "goat") -> None:
+        self.kind = kind
         self.state = Fire.READY
         self.timer = 0.0
         self.target: Stickman | None = None
@@ -101,14 +113,27 @@ class GoatHead:
         turn = wrap_angle(aim.angle() - chimera.local(REST_AIM).angle())
         return rest.rotated(turn * NECK_LEAN)
 
+    def head(self, chimera: Chimera) -> Vec2:
+        return {
+            "lion": chimera.lion_head,
+            "snake": chimera.snake_head,
+        }.get(self.kind, chimera.goat_head)
+
+    def rest_aim(self, chimera: Chimera) -> Vec2:
+        if self.kind == "lion":
+            return chimera.forward
+        if self.kind == "snake":
+            return Vec2.from_angle(chimera.snake_angle)
+        return chimera.local(REST_AIM).normalized()
+
     def mouth(self, chimera: Chimera) -> Vec2:
         aim = self.aim if self.aim is not None else chimera.forward
-        return chimera.goat_head + aim * MOUTH_REACH
+        return self.head(chimera) + aim * MOUTH_REACH
 
     def update(self, dt: float, chimera: Chimera) -> None:
         up = chimera.up
         sway = 0.12 * math.sin(chimera.clock * 0.9) + 0.05 * math.sin(chimera.clock * 2.3)
-        rest = chimera.local(REST_AIM).normalized().rotated(sway * chimera.facing)
+        rest = self.rest_aim(chimera).rotated(sway * chimera.facing)
         if self.aim is None:
             self.aim = rest
         self.timer -= dt
@@ -130,7 +155,7 @@ class GoatHead:
 
         desired = rest
         if self.state in (Fire.WINDUP, Fire.BREATHE):
-            way = (self.focus - chimera.goat_head).normalized()
+            way = (self.focus - self.head(chimera)).normalized()
             desired = way.rotated(self._sweep_offset())
         rate = BEAM_RATE if self.state is Fire.BREATHE else AIM_RATE
         off, want = _off(up, self.aim), _off(up, desired)
@@ -141,6 +166,12 @@ class GoatHead:
                 self.state, self.timer = Fire.BREATHE, FIRE_BURST
 
         if self.state is Fire.BREATHE:
+            # Primal (legendary) heads each tint their beam; the common goat stays orange.
+            palette = (
+                FIRE_PALETTES.get(self.kind, "")
+                if getattr(chimera, "legendary", False)
+                else ""
+            )
             self._due = emit(
                 self.flames,
                 self._due,
@@ -153,6 +184,7 @@ class GoatHead:
                 chimera.prowl.velocity * 0.2,
                 FLAME_SPREAD,
                 FLAME_SIZE,
+                palette=palette,
             )
             if self.timer <= 0.0:
                 self.state, self.timer = Fire.COOLDOWN, FIRE_COOLDOWN
@@ -179,7 +211,7 @@ class GoatHead:
                 middle,
                 push,
                 FIRE_SOURCE,
-                FIRE_DEATH,
+                FIRE_DEATHS[self.kind],
                 False,
             ):
                 stickman.succumb("fire")
@@ -206,8 +238,10 @@ class GoatHead:
         for stickman in chimera.world.stickmen:
             if not self._fair(chimera, stickman):
                 continue
-            distance = stickman.center().distance_to(chimera.goat_head)
-            if distance < best_distance:
+            distance = stickman.center().distance_to(self.head(chimera))
+            priority = getattr(stickman, "target_priority", 0)
+            previous = getattr(best, "target_priority", 0)
+            if priority > previous or (priority == previous and distance < best_distance):
                 best, best_distance = stickman, distance
         return best
 
@@ -215,9 +249,11 @@ class GoatHead:
         """`stickman` is fair game, in range of its head and within its neck's turn."""
         if stickman is None or not stickman.prey:
             return False
-        offset = stickman.center() - chimera.goat_head
+        offset = stickman.center() - self.head(chimera)
         if offset.length() > FIRE_RANGE * slack:
             return False
+        if self.kind != "goat":
+            return True
         return abs(wrap_angle(offset.angle() - chimera.up.angle())) <= NECK_CONE * slack
 
     def _face(self, chimera: Chimera) -> None:

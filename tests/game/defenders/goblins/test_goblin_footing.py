@@ -34,3 +34,29 @@ def test_spear_goblin_throws_from_where_it_stands_when_it_can():
     )
     assert goblin.contact().y == 700.0, "stayed on the floor"
     assert throws >= 3
+
+
+def test_spear_goblin_can_throw_while_climbing_a_wall():
+    from dungeons_desktops.navigation.planner import Anchor
+
+    world = SimWorld([Rect(400, 300, 200, 400)], 700.0, 1200.0, ceiling=20.0, seed=5)
+    prey = world.add_stickman(Vec2(360, 500), "barbarian")
+    prey.update = lambda dt: None
+    prey.hurt = lambda *args, **kwargs: False
+    goblin = world.add_goblin(Vec2(400, 500), "spear")
+    wall = next(
+        surface
+        for surface in world.goblin_planner.surfaces
+        if not surface.walkable and abs(surface.start.x - 400) < 1
+    )
+    point = wall.point_at((wall.low + wall.high) / 2)
+    goblin.follower.reset(Anchor(wall, point))
+    goblin.locomotion.teleport(goblin.follower.command())
+    goblin.cooldown = 0.0
+    throws = 0
+    for _ in range(180):
+        world.advance(DT)
+        if goblin.weapon.time is not None and goblin.weapon.time < 1.5 * DT:
+            throws += 1
+    assert goblin.locomotion.mode is PoseMode.CLIMB
+    assert throws >= 1
