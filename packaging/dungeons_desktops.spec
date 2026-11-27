@@ -18,9 +18,32 @@ hiddenimports: list[str] = [
 ]
 
 # Bundle PySide6 Qt plugins (platforms, imageformats, etc.).
+# Drop Qt tool .app bundles — they break Developer ID deep codesign.
+_SKIP_BUNDLE_NAMES = {
+    "Assistant.app",
+    "Assistant__dot__app",
+    "Designer.app",
+    "Designer__dot__app",
+    "Linguist.app",
+    "Linguist__dot__app",
+}
+
+
+def _without_qt_tools(entries: list) -> list:
+    kept = []
+    for entry in entries:
+        src = Path(entry[0])
+        if src.name in _SKIP_BUNDLE_NAMES:
+            continue
+        if any(part in _SKIP_BUNDLE_NAMES for part in src.parts):
+            continue
+        kept.append(entry)
+    return kept
+
+
 pyside_datas, pyside_binaries, pyside_hidden = collect_all("PySide6")
-datas += pyside_datas
-binaries += pyside_binaries
+datas += _without_qt_tools(pyside_datas)
+binaries += _without_qt_tools(pyside_binaries)
 hiddenimports += pyside_hidden
 
 if sys.platform == "darwin":
@@ -54,6 +77,8 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Prefer signing via packaging/macos/sign_and_notarize.sh after the build
+# (deep + hardened runtime + notarization). Leave PyInstaller's identity empty.
 exe = EXE(
     pyz,
     a.scripts,

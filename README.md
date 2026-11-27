@@ -13,12 +13,37 @@ Prebuilt apps are published to GitHub Releases:
 
 Grab `Dungeons-and-Desktops-macOS.zip` or `Dungeons-and-Desktops-Windows.zip`, unpack, and run.
 
-These builds are **unsigned** for now:
-
-- **macOS:** right-click the app → Open, or run `xattr -cr "Dungeons and Desktops.app"` after unzipping.
-- **Windows:** if SmartScreen warns, choose More info → Run anyway.
+- **macOS:** CI signs and notarizes with your Developer ID when the Apple secrets below are set. Without them, the zip is unsigned — right-click → Open, or `xattr -cr "Dungeons and Desktops.app"`.
+- **Windows:** still unsigned; if SmartScreen warns, choose More info → Run anyway.
 
 CI rebuilds the `dev` prerelease on every push to `main` and on manual **Build apps** workflow runs. Version tags `v*` publish immutable releases.
+
+### macOS signing secrets (GitHub Actions)
+
+Create a **Developer ID Application** certificate in your Apple Developer account, export it as a `.p12`, then add these repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE_BASE64` | `base64 -i YourCert.p12 \| pbcopy` (paste the result) |
+| `APPLE_CERTIFICATE_PASSWORD` | Password you set when exporting the `.p12` |
+| `CODESIGN_IDENTITY` | Exact name, e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_TEAM_ID` | 10-character Team ID |
+
+For notarization (recommended), create an [App Store Connect API key](https://appstoreconnect.apple.com/access/integrations/api) with **Developer** access and add:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_API_KEY_ID` | Key ID |
+| `APPLE_API_ISSUER_ID` | Issuer UUID |
+| `APPLE_API_KEY` | Full contents of `AuthKey_XXXXXX.p8` |
+
+Local sign after a PyInstaller build:
+
+```bash
+export CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+# optional notarization env vars same as above
+packaging/macos/sign_and_notarize.sh "dist/Dungeons and Desktops.app"
+```
 
 ## Setup (macOS / Windows)
 
