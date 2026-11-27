@@ -4,6 +4,16 @@ An idle **desktop pet** / dungeon-defense experiment in Python and PySide6. Crea
 
 Product notes and deep design live in [docs/PRD.md](docs/PRD.md). Marketing pages are in [`site/`](site/).
 
+<p align="center">
+  <img src="site/assets/creatures/dragon.png" alt="Dragon" height="140" />
+  &nbsp;&nbsp;
+  <img src="site/assets/creatures/minotaur.png" alt="Minotaur" height="140" />
+  &nbsp;&nbsp;
+  <img src="site/assets/creatures/mimic.png" alt="Mimic" height="140" />
+  &nbsp;&nbsp;
+  <img src="site/assets/creatures/wizard.png" alt="Mage" height="140" />
+</p>
+
 ## Download
 
 Prebuilt apps: [dev release](https://github.com/Werd6/Dugeons_and_Desktops/releases/tag/dev)
