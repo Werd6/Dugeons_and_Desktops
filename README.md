@@ -58,7 +58,7 @@ On macOS this also installs `pyobjc-framework-Quartz`, which desktop mode uses t
 
 ## Run the desktop pet
 
-New games start with **Goblins, Mimic, and Dragon**. Open **Unlocks…** from the
+New games start with **Dragon, Goblins, and Mimic** (Dragon first). Open **Unlocks…** from the
 tray or settings window to claim more monsters and heroes. The Worm requires
 **100 total enemy kills**. Each class-linked monster requires **50 kills of its
 ordinary enemy class**, and its hero requires **100 kills credited to that monster**
