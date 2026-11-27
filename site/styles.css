@@ -336,19 +336,10 @@ a:hover {
   font-size: 0.98rem;
 }
 
-.note {
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.9rem;
-  max-width: 48ch;
-}
-
 .site-footer {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 2rem var(--pad) 2.75rem;
+  padding: 2rem var(--pad) 1.5rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.5rem;
@@ -360,6 +351,26 @@ a:hover {
 
 .site-footer a {
   color: var(--muted);
+}
+
+.credit-banner {
+  display: block;
+  margin: 0;
+  padding: 1rem var(--pad) 1.75rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  background: rgba(5, 7, 15, 0.55);
+}
+
+.credit-banner:hover {
+  color: var(--horn);
 }
 
 @keyframes drift {
