@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dungeons &amp; Desktops — Procedural desktop pets</title>
+    <meta
+      name="description"
+      content="An idle desktop pet and procedural animation experiment. No sprites — AI-simulated creatures driven entirely by math."
+    />
+    <link rel="icon" href="./assets/app-icon.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./index.html">
+        <img src="./assets/app-icon.png" width="512" height="512" alt="" />
+        Dungeons &amp; Desktops
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="./index.html" aria-current="page">About</a>
+        <a href="./download.html">Download</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-label="Introduction">
+        <div class="hero-visual" aria-hidden="true">
+          <img
+            src="./assets/app-icon.png"
+            width="512"
+            height="512"
+            alt=""
+          />
+          <div class="hero-veil"></div>
+        </div>
+        <div class="hero-copy">
+          <h1 class="hero-brand">Dungeons &amp; Desktops</h1>
+          <p class="hero-line">An idle desktop pet built as a procedural animation experiment.</p>
+          <p class="hero-support">
+            No sprites. Every creature is math — AI-simulated agents that live on your real windows.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="./download.html">Download</a>
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/Werd6/Dugeons_and_Desktops"
+              >Source on GitHub</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="thesis-heading">
+        <h2 id="thesis-heading">What it is</h2>
+        <p>
+          <strong>Dungeons &amp; Desktops</strong> is an idle game that treats your desktop as the
+          level. Windows become terrain. Creatures path, fight, and idle across that geometry while
+          you work.
+        </p>
+        <p>
+          Under the surface it is a systems piece: locomotion, inverse kinematics, combat steering,
+          and desktop window sensing — all feeding
+          <strong>AI-simulated creatures</strong> with no hand-drawn frame cycles.
+        </p>
+        <p>
+          It exists as a portfolio experiment in computer science: can expressive animation come from
+          simulation alone?
+        </p>
+
+        <div class="accents" aria-label="Creature accents">
+          <figure class="accent">
+            <img src="./assets/creatures/dragon.png" alt="Red dragon silhouette" />
+            <figcaption>Dragon</figcaption>
+          </figure>
+          <figure class="accent">
+            <img src="./assets/creatures/minotaur.png" alt="Minotaur silhouette" />
+            <figcaption>Minotaur</figcaption>
+          </figure>
+          <figure class="accent">
+            <img src="./assets/creatures/mimic.png" alt="Mimic chest silhouette" />
+            <figcaption>Mimic</figcaption>
+          </figure>
+          <figure class="accent">
+            <img src="./assets/creatures/wizard.png" alt="Wizard adventurer silhouette" />
+            <figcaption>Wizard</figcaption>
+          </figure>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>A procedural animation experiment.</span>
+      <span>
+        <a href="https://github.com/Werd6/Dugeons_and_Desktops">GitHub</a>
+        ·
+        <a href="./download.html">Download</a>
+      </span>
+    </footer>
+
+    <script src="./script.js" defer></script>
+  </body>
+</html>

@@ -8,6 +8,7 @@ from typing import Any
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QHBoxLayout,
@@ -193,6 +194,9 @@ class DefenderMenu(QDialog):
         self.kills_button.toggled.connect(self._set_show_kills)
         toggles2.addWidget(self.kills_button)
         column.addLayout(toggles2)
+        self.quit_button = pill_button("Quit game")
+        self.quit_button.clicked.connect(self._quit_app)
+        column.addWidget(self.quit_button)
 
         column.addWidget(
             section_label(
@@ -260,6 +264,12 @@ class DefenderMenu(QDialog):
             self.host.set_show_kills(show)
             if getattr(self.host, "kills_action", None) is not None:
                 self.host.kills_action.setChecked(show)
+
+    def _quit_app(self) -> None:
+        """Leave the desktop pet entirely (needed for packaged builds with no terminal)."""
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
 
     def sync(self) -> None:
         """Update roster controls and readiness without changing selection."""

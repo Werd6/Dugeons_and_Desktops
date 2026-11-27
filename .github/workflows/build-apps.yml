@@ -86,7 +86,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\Dungeons and Desktops\*" -DestinationPath "${{ matrix.artifact }}"
+          Copy-Item packaging\windows\README.txt "dist\Dungeons and Desktops\README.txt"
+          # Keep a parent folder so the exe stays next to _internal after unzip.
+          Compress-Archive -Path "dist\Dungeons and Desktops" -DestinationPath "${{ matrix.artifact }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -134,7 +136,9 @@ jobs:
             on the repo. If Gatekeeper still blocks an older unsigned zip, run
             `xattr -cr "Dungeons and Desktops.app"` after unzipping.
 
-            **Windows (unsigned):** if SmartScreen warns, choose More info → Run anyway.
+            **Windows (unsigned):** unzip the whole folder and run the `.exe` next to
+            `_internal` (do not move only the exe). If SmartScreen warns, choose
+            More info → Run anyway.
           files: release/*.zip
           fail_on_unmatched_files: true
         env:

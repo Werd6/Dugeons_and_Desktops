@@ -13,7 +13,7 @@ import sys
 import time
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap, QScreen
+from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPixmap, QScreen
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from dungeons_desktops.core.geometry import Rect, Vec2
@@ -449,7 +449,7 @@ class DesktopPet(QObject):
         self._action(menu, "Lifetime progress…", self.defender_menu.show_progress)
         self._action(menu, "Reset lifetime progress…", self.defender_menu.reset_progress)
         menu.addSeparator()
-        self._action(menu, "Quit Dungeons & Desktops", self.app.quit)
+        self._action(menu, "Quit game", self.app.quit)
         tray = QSystemTrayIcon(_goblin_icon(), self)
         tray.setToolTip("Dungeons & Desktops")
         tray.setContextMenu(menu)
@@ -569,6 +569,12 @@ def run_desktop(quit_after: float | None = None, mock: bool = False) -> int:
     app.setApplicationName("Dungeons & Desktops")
     app.setQuitOnLastWindowClosed(False)
     _configure_macos_overlay_application()
+    # Merge into the macOS app menu so Cmd+Q works without a terminal / Dock focus.
+    quit_action = QAction("Quit game", app)
+    quit_action.setShortcut(QKeySequence.StandardKey.Quit)
+    quit_action.setMenuRole(QAction.MenuRole.QuitRole)
+    quit_action.triggered.connect(app.quit)
+    app.setProperty("_dnd_quit_action", quit_action)
     source, show_terrain = _window_source(app, mock)
     pet = DesktopPet(app, source, show_terrain, persist_progress=not mock)
     pet.start()

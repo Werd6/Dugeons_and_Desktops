@@ -14,7 +14,7 @@ Prebuilt apps are published to GitHub Releases:
 Grab `Dungeons-and-Desktops-macOS.zip` or `Dungeons-and-Desktops-Windows.zip`, unpack, and run.
 
 - **macOS:** CI signs and notarizes with your Developer ID when the Apple secrets below are set. Without them, the zip is unsigned — right-click → Open, or `xattr -cr "Dungeons and Desktops.app"`.
-- **Windows:** still unsigned; if SmartScreen warns, choose More info → Run anyway.
+- **Windows:** unzip the whole folder and keep the `.exe` next to `_internal` (moving only the exe causes a Python DLL error). Still unsigned; if SmartScreen warns, choose More info → Run anyway.
 
 CI rebuilds the `dev` prerelease on every push to `main` and on manual **Build apps** workflow runs. Version tags `v*` publish immutable releases.
 

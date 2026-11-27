@@ -213,6 +213,7 @@ def test_command_board_applies_the_slate_theme_and_keeps_roster_controls():
             "Play", "Unlocks", "Ledger",
         ]
         assert "dragon" in menu.checkboxes and menu.spawn_mighty_button is not None
+        assert menu.quit_button is not None and menu.quit_button.text() == "Quit game"
         assert menu.unlocks_dialog.buttons and menu.progress_dialog.summary is not None
         menu.close()
     """)

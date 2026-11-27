@@ -25,6 +25,30 @@ MIN_WIDTH = 120.0
 MIN_HEIGHT = 60.0
 TOLERANCE = 1.0
 
+# Win32 shell / desktop hosts that EnumWindows still reports as "visible".
+# WorkerW/Progman are full-screen wallpaper surfaces — their top edge becomes a
+# phantom walkable ledge when no real app windows are open.
+WIN_SHELL_CLASSES = frozenset(
+    {
+        "Progman",
+        "WorkerW",
+        "Shell_TrayWnd",
+        "Shell_SecondaryTrayWnd",
+        "NotifyIconOverflowWindow",
+        "Windows.UI.Core.CoreWindow",
+        "ForegroundStaging",
+        "ApplicationManager_DesktopShellWindow",
+        "XamlExplorerHostIslandWindow",
+        "Shell_CharmWindow",
+        "Dv2ControlHost",
+        "DummyDWMListenerWindow",
+        "EdgeUiInputTopHWND",
+        "MozillaDropShadowWindowClass",
+        "SysShadow",
+        "ThumbnailDeviceHelperWnd",
+    }
+)
+
 
 @dataclass(frozen=True)
 class WindowRecord:
@@ -93,10 +117,34 @@ class WinWindowSource:
 
         self._ctypes = ctypes
         self._user32 = ctypes.windll.user32
+        self._dwmapi = getattr(ctypes.windll, "dwmapi", None)
         self._pid = os.getpid()
         # Logical points for Qt: scale physical GetWindowRect by per-window DPI.
         self._user32.GetDpiForWindow.restype = wintypes.UINT
         self._user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+
+    def _class_name(self, hwnd: int) -> str:
+        buf = self._ctypes.create_unicode_buffer(256)
+        self._user32.GetClassNameW(hwnd, buf, 256)
+        return buf.value
+
+    def _is_cloaked(self, hwnd: int) -> bool:
+        """UWP / shell windows that are on-screen to Win32 but invisible to the user."""
+        if self._dwmapi is None:
+            return False
+        ctypes = self._ctypes
+        cloaked = ctypes.wintypes.DWORD(0)
+        DWMWA_CLOAKED = 14
+        try:
+            status = self._dwmapi.DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                ctypes.byref(cloaked),
+                ctypes.sizeof(cloaked),
+            )
+        except Exception:
+            return False
+        return status == 0 and int(cloaked.value) != 0
 
     def snapshot(self) -> list[WindowRecord]:
         ctypes = self._ctypes
@@ -123,6 +171,10 @@ class WinWindowSource:
                 return True
             if ex_style & WS_EX_NOACTIVATE and not (ex_style & 0x00040000):  # WS_EX_APPWINDOW
                 pass
+            if self._class_name(hwnd) in WIN_SHELL_CLASSES:
+                return True
+            if self._is_cloaked(hwnd):
+                return True
             pid = wintypes.DWORD()
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             if int(pid.value) == self._pid:
