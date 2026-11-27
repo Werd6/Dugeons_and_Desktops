@@ -71,11 +71,13 @@ LIZARDS = 2
 DRAKE_PACK = 3
 """How many of the drake `COLOURS` ride in, picked at random, no two alike."""
 DEFENDERS = (
+    "dragon",
+    "goblins",
+    "mimic",
     "chimera",
     "drow",
     "drakes",
     "hydra",
-    "mimic",
     "lich",
     "minotaur",
     "displacer",
@@ -83,11 +85,9 @@ DEFENDERS = (
     "worm",
     "zombies",
     "graveknights",
-    "goblins",
-    "dragon",
 )
 SUPPORTED_DEFENDERS = DEFENDERS
-"""Every menu option in the Command Board roster."""
+"""Every menu option in the Command Board roster (starters first)."""
 EDGE_TOUCH = 1.0
 SIDE_LANE = 18.0
 BOTTOM_LANE = stick_figure.MOVES.max_jump - 1.0
@@ -143,10 +143,9 @@ class DesktopSession(SimWorld):
         enforce_unlocks: bool = False,
     ) -> None:
         """`screen` is the whole display; `usable` the part outside the menu bar and Dock.
-        `defenders` is the rotation ("chimera", "drow", "drakes", "hydra",
-        "mimic", "lich", "minotaur", "displacer", "mindflayer", "worm", "goblins",
-        "dragon"), starting with the first. The desktop app enables `enforce_unlocks`;
-        isolated simulations may use the full roster for combat testing."""
+        `defenders` is the rotation (starters first: dragon, goblins, mimic, then
+        the unlockable roster), starting with the first. The desktop app enables
+        `enforce_unlocks`; isolated simulations may use the full roster for combat testing."""
         self.screen = screen
         self.usable = usable
         self.source = source

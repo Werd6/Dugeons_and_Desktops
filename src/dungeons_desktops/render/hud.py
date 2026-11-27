@@ -24,14 +24,40 @@ SKULL = QColor(236, 230, 214)
 WOUNDED = QColor(214, 128, 132)
 
 
-def draw_kill_counter(painter: QPainter, kills: int, corner: Vec2, bump: float = 0.0) -> None:
+def kill_counter_size(kills: int) -> tuple[float, float, float, float]:
+    """Width, height, skull radius, and horizontal pad for the counter pill."""
+    font = QFont()
+    font.setPixelSize(13)
+    font.setBold(True)
+    text_width = QFontMetricsF(font).horizontalAdvance(str(kills))
+    height, skull, gap, pad = 24.0, 7.0, 6.0, 9.0
+    width = pad + 2 * skull + gap + text_width + pad
+    return width, height, skull, pad
+
+
+def kill_counter_skull_center(kills: int, corner: Vec2) -> Vec2:
+    """Screen-space skull center matching `draw_kill_counter`'s transform."""
+    width, height, skull, pad = kill_counter_size(kills)
+    # Same double-translate as draw_kill_counter (without bump scale).
+    local = Vec2(pad + skull, height / 2 - 1.0)
+    return Vec2(corner.x - width + local.x, corner.y - height + local.y)
+
+
+def draw_kill_counter(
+    painter: QPainter,
+    kills: int,
+    corner: Vec2,
+    bump: float = 0.0,
+    *,
+    alert: bool = False,
+) -> None:
     font = QFont(painter.font())
     font.setPixelSize(13)
     font.setBold(True)
     text = str(kills)
+    width, height, skull, pad = kill_counter_size(kills)
+    gap = 6.0
     text_width = QFontMetricsF(font).horizontalAdvance(text)
-    height, skull, gap, pad = 24.0, 7.0, 6.0, 9.0
-    width = pad + 2 * skull + gap + text_width + pad
     painter.save()
     painter.translate(corner.x - width / 2, corner.y - height / 2)
     painter.scale(1.0 + 0.25 * bump, 1.0 + 0.25 * bump)
@@ -57,6 +83,37 @@ def draw_kill_counter(painter: QPainter, kills: int, corner: Vec2, bump: float =
     painter.setPen(COUNTER_TEXT)
     left = pad + 2 * skull + gap
     painter.drawText(QRectF(left, 0, text_width + 1.0, height), Qt.AlignmentFlag.AlignVCenter, text)
+    if alert:
+        bang = QFont(painter.font())
+        bang.setPixelSize(14)
+        bang.setBold(True)
+        painter.setFont(bang)
+        painter.setPen(QColor(255, 210, 64))
+        painter.drawText(
+            QRectF(center.x - 8.0, center.y - 18.0, 16.0, 16.0),
+            Qt.AlignmentFlag.AlignCenter,
+            "!",
+        )
+    painter.restore()
+
+
+def draw_menu_hint(painter: QPainter, corner: Vec2, text: str) -> None:
+    """Small tip anchored above the skull counter (same `corner` as `draw_kill_counter`)."""
+    font = QFont(painter.font())
+    font.setPixelSize(12)
+    font.setBold(True)
+    metrics = QFontMetricsF(font)
+    text_width = metrics.horizontalAdvance(text)
+    height, pad, gap = 26.0, 10.0, 10.0
+    width = text_width + 2.0 * pad
+    painter.save()
+    painter.translate(corner.x - width, corner.y - 12.0 - gap - height)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(COUNTER_BACK)
+    painter.drawRoundedRect(QRectF(0, 0, width, height), 8.0, 8.0)
+    painter.setFont(font)
+    painter.setPen(COUNTER_TEXT)
+    painter.drawText(QRectF(0, 0, width, height), Qt.AlignmentFlag.AlignCenter, text)
     painter.restore()
 
 

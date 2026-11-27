@@ -356,16 +356,18 @@ def test_it_never_targets_a_thrall():
 # ----- the desktop, HP and death -------------------------------------------------------
 
 
-def test_it_follows_the_mimic_in_the_desktop_rotation_and_fills_the_health_bar():
-    assert DEFENDERS[4:6] == ("mimic", "lich")
+def test_it_follows_the_hydra_in_the_desktop_rotation_and_fills_the_health_bar():
+    assert DEFENDERS.index("hydra") + 1 == DEFENDERS.index("lich")
     screen, usable = Rect(0, 0, 1400, 900), Rect(0, 30, 1400, 800)
     source = FakeWindowSource([WindowRecord(1, Rect(400, 400, 400, 200))])
-    session = DesktopSession(screen, usable, source, seed=2, max_stickmen=0)
-    session.rotate()  # past the chimera
-    session.rotate()  # past the drow
-    session.rotate()  # past the drake riders
-    session.rotate()
-    session.rotate()
+    session = DesktopSession(
+        screen,
+        usable,
+        source,
+        seed=2,
+        max_stickmen=0,
+        defenders=DEFENDERS[DEFENDERS.index("lich") :],
+    )
     assert session.defender == "lich" and len(session.liches) == 1
     lich = session.liches[0]
     assert lich.position.y == 400

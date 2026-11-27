@@ -21,7 +21,7 @@ PATHS = (
 
 def test_new_game_has_only_three_base_monsters_and_no_heroes():
     progress = Progression()
-    assert progress.unlocked_defenders == BASE_DEFENDERS == ("goblins", "mimic", "dragon")
+    assert progress.unlocked_defenders == BASE_DEFENDERS == ("dragon", "goblins", "mimic")
     assert not progress.unlocked_heroes and not progress.claimed_unlocks
     assert len(UNLOCK_BY_KEY) == len(UNLOCKS) == 35
     assert not any(progress.can_unlock(unlock.key) for unlock in UNLOCKS)

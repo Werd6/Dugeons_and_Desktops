@@ -633,18 +633,21 @@ def test_it_rides_a_moving_window():
     assert mimic.position == Vec2(x + 40, 420) and mimic.follower is not None
 
 
-def test_it_follows_the_hydra_in_the_desktop_rotation_and_fills_the_health_bar():
+def test_it_follows_the_goblins_in_the_desktop_rotation_and_fills_the_health_bar():
     assert (
-        DEFENDERS[3:5] == ("hydra", "mimic")
+        DEFENDERS.index("goblins") + 1 == DEFENDERS.index("mimic")
         and DEFENDER_BARS["mimic"][0] == "Mimic"
     )
     screen, usable = Rect(0, 0, 1400, 900), Rect(0, 30, 1400, 800)
     source = FakeWindowSource([WindowRecord(1, Rect(400, 400, 400, 200))])
-    session = DesktopSession(screen, usable, source, seed=2, max_stickmen=0)
-    session.rotate()  # past the chimera
-    session.rotate()  # past the drow
-    session.rotate()  # past the drake riders
-    session.rotate()
+    session = DesktopSession(
+        screen,
+        usable,
+        source,
+        seed=2,
+        max_stickmen=0,
+        defenders=DEFENDERS[DEFENDERS.index("mimic") :],
+    )
     assert session.defender == "mimic" and len(session.mimics) == 1 and not session.hydras
     mimic = session.mimics[0]
     assert mimic.position.y == 400
@@ -655,7 +658,7 @@ def test_it_follows_the_hydra_in_the_desktop_rotation_and_fills_the_health_bar()
     assert abs(session.defender_health - (MIMIC_HP - 1) / MIMIC_HP) < 1e-9
     session.hurt_monster(mimic, MIMIC_HP, mimic.center(), Vec2(0, -40))
     run(session, 0.1)
-    assert session.defender == "lich" and not session.mimics
+    assert session.defender == "chimera" and not session.mimics
 
 
 def test_it_dies_spilling_coins_and_fades():

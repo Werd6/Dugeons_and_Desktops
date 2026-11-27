@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-BASE_DEFENDERS = ("goblins", "mimic", "dragon")
+BASE_DEFENDERS = ("dragon", "goblins", "mimic")
+"""Starter roster order — Dragon leads so a fresh game summons it first."""
 CLASS_KILLS_REQUIRED = 50
 MONSTER_KILLS_REQUIRED = 100
 WORM_KILLS_REQUIRED = 100

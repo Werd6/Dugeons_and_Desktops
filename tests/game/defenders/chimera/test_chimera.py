@@ -49,8 +49,9 @@ def test_the_chimera_prowls_in_first_on_the_front_window():
         FakeWindowSource([WindowRecord(1, WINDOW)]),
         seed=3,
         max_stickmen=0,
+        defenders=DEFENDERS[DEFENDERS.index("chimera") :],
     )
-    assert DEFENDERS[0] == "chimera" and world.defender == "chimera"
+    assert world.defender == "chimera"
     assert DEFENDER_BARS["chimera"][0] == "Chimera"
     assert len(world.chimeras) == 1
     chimera = world.chimeras[0]

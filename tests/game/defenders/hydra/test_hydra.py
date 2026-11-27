@@ -489,13 +489,17 @@ def test_it_has_hydra_hp_dies_limp_and_fades():
 
 
 def test_it_follows_the_drakes_in_the_desktop_rotation_and_fills_the_health_bar():
-    assert DEFENDERS[:4] == ("chimera", "drow", "drakes", "hydra")
+    assert DEFENDERS.index("drakes") + 1 == DEFENDERS.index("hydra")
     screen, usable = Rect(0, 0, 1400, 900), Rect(0, 30, 1400, 800)
     source = FakeWindowSource([WindowRecord(1, Rect(400, 400, 400, 200))])
-    session = DesktopSession(screen, usable, source, seed=2, max_stickmen=0)
-    session.rotate()  # past the chimera
-    session.rotate()  # past the drow
-    session.rotate()  # past the drake riders
+    session = DesktopSession(
+        screen,
+        usable,
+        source,
+        seed=2,
+        max_stickmen=0,
+        defenders=DEFENDERS[DEFENDERS.index("hydra") :],
+    )
     assert session.defender == "hydra" and len(session.hydras) == 1
     hydra = session.hydras[0]
     assert hydra.underground and hydra.exit is not None and hydra.exit.point.y == 400
@@ -505,7 +509,7 @@ def test_it_follows_the_drakes_in_the_desktop_rotation_and_fills_the_health_bar(
     assert abs(session.defender_health - (HYDRA_HP - 1) / HYDRA_HP) < 1e-9
     session.hurt_monster(hydra, HYDRA_HP, hydra.center(), Vec2(0, -40))
     run(session, 0.1)
-    assert session.defender == "mimic" and not session.hydras
+    assert session.defender == "lich" and not session.hydras
 
 
 def test_its_exit_is_a_window_side_only_off_screen_edges_and_clear_of_other_windows():

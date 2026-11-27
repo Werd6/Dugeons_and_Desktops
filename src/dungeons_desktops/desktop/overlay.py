@@ -13,8 +13,8 @@ import sys
 import time
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSettings, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPixmap, QScreen
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
+from PySide6.QtGui import QAction, QColor, QCursor, QIcon, QKeySequence, QPainter, QPixmap, QScreen
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QToolTip, QWidget
 
 from dungeons_desktops.core.geometry import Rect, Vec2
 from dungeons_desktops.desktop.instance import (
@@ -64,13 +64,15 @@ from dungeons_desktops.game.heroes.the_inquisitive.spell_render import draw_iggy
 from dungeons_desktops.game.heroes.the_mighty.render import draw_mighty_effects
 from dungeons_desktops.game.heroes.the_slayer.render import draw_slayer_effects
 from dungeons_desktops.game.progression import Progression
-from dungeons_desktops.game.unlocks import HERO_NAMES
+from dungeons_desktops.game.unlocks import HERO_NAMES, UNLOCKS
 from dungeons_desktops.render.chromatic import draw_chromatic_effects
 from dungeons_desktops.render.hud import (
     HEALTH_BAR_HEIGHT,
     draw_health_bar,
     draw_kill_counter,
     draw_kill_marks,
+    draw_menu_hint,
+    kill_counter_skull_center,
 )
 from dungeons_desktops.render.scene import (
     DRAGON_SKIN,
@@ -109,6 +111,11 @@ COUNTER_MARGIN = 12.0
 COUNTER_GAP = 6.0
 """Between the health bar and the kill counter stacked above it."""
 KILL_BUMP_TIME = 0.5
+MENU_HINT_KEY = "ui/menu_reopen_hint_shown"
+MENU_HINT_SECONDS = 14.0
+MENU_HINT_TEXT = "Open the app again to show the menu"
+UNLOCK_ALERT_TIP = "Unlocks available"
+UNLOCK_HIT = 22
 HEADLESS_QT_PLATFORMS = frozenset({"minimal", "offscreen", "vnc"})
 DEFENDER_BARS = {
     "chimera": ("Chimera", MANE.lighter(130)),
@@ -157,6 +164,10 @@ class DesktopOverlay(QWidget):
         self.show_kills = True
         self._kills_seen = session.progression.skulls_earned
         self._kill_time = -KILL_BUMP_TIME
+        self.menu_hint_until = 0.0
+        self.unlock_alert = False
+        self._kill_corner = Vec2(0.0, 0.0)
+        self.unlock_hit = _UnlockAlertHit(self._show_unlock_tip)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -166,12 +177,40 @@ class DesktopOverlay(QWidget):
         # its all-Spaces behavior, including other apps' fullscreen Spaces.
         QTimer.singleShot(0, lambda: _float_above_everything(self))
 
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self.unlock_hit.hide()
+
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         try:
             self._paint(painter)
         finally:
             painter.end()
+
+    def _show_unlock_tip(self) -> None:
+        QToolTip.showText(QCursor.pos(), UNLOCK_ALERT_TIP, self.unlock_hit)
+
+    def sync_unlock_alert(self) -> None:
+        """Refresh the bang + click target when claimable unlocks change."""
+        ready = any(self.session.progression.can_unlock(unlock.key) for unlock in UNLOCKS)
+        self.unlock_alert = ready and self.show_kills
+        if not self.unlock_alert or not self.isVisible():
+            self.unlock_hit.hide()
+            return
+        skull = kill_counter_skull_center(
+            self.session.progression.skulls_earned, self._kill_corner
+        )
+        # Counter corner is already in global screen space (same as session.usable).
+        self.unlock_hit.setGeometry(
+            int(skull.x - UNLOCK_HIT / 2),
+            int(skull.y - UNLOCK_HIT / 2 - 4),
+            UNLOCK_HIT,
+            UNLOCK_HIT,
+        )
+        if not self.unlock_hit.isVisible():
+            self.unlock_hit.show()
+        _float_above_everything(self.unlock_hit)
 
     def _paint(self, painter: QPainter) -> None:
         session = self.session
@@ -254,7 +293,40 @@ class DesktopOverlay(QWidget):
             label, color = bar
             draw_health_bar(painter, health, corner, color, label)
             corner = corner - Vec2(0.0, HEALTH_BAR_HEIGHT + COUNTER_GAP)
-        draw_kill_counter(painter, kills, corner, bump * bump)
+        self._kill_corner = corner
+        draw_kill_counter(painter, kills, corner, bump * bump, alert=self.unlock_alert)
+        if self.menu_hint_until > now:
+            draw_menu_hint(painter, corner, MENU_HINT_TEXT)
+
+
+class _UnlockAlertHit(QWidget):
+    """Tiny clickable chip over the skull bang; the main overlay stays click-through."""
+
+    def __init__(self, on_click) -> None:
+        super().__init__(
+            None,
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowDoesNotAcceptFocus
+            | Qt.WindowType.NoDropShadowWindowHint,
+        )
+        self._on_click = on_click
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(UNLOCK_HIT, UNLOCK_HIT)
+        self.hide()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() is Qt.MouseButton.LeftButton:
+            self._on_click()
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        # Invisible hit target — the bang is painted on the overlay itself.
+        return
 
 
 def _supports_native_macos_overlay(qt_platform: str) -> bool:
@@ -380,6 +452,10 @@ class DesktopPet(QObject):
         self.overlay = DesktopOverlay(self.session, screen)
         self.defender_menu = DefenderMenu(self.session, self.settings)
         self.overlay.show_terrain = show_terrain
+        if persist_progress and not self.settings.value(MENU_HINT_KEY, False, type=bool):
+            self.settings.setValue(MENU_HINT_KEY, True)
+            self.settings.sync()
+            self.overlay.menu_hint_until = time.perf_counter() + MENU_HINT_SECONDS
         self.paused = False
         self._activation_menu_ready = False
         self._reported_error: str | None = None
@@ -403,6 +479,7 @@ class DesktopPet(QObject):
         self.tray = self._make_tray()
         self.defender_menu.bind_host(self)
         self.defender_menu.unlocks_changed.connect(self._sync_hero_actions)
+        self.defender_menu.unlocks_changed.connect(self.overlay.sync_unlock_alert)
         self.app.installEventFilter(self)
 
     def start(self) -> None:
@@ -507,6 +584,7 @@ class DesktopPet(QObject):
 
     def set_show_kills(self, show: bool) -> None:
         self.overlay.show_kills = show
+        self.overlay.sync_unlock_alert()
         self.overlay.update()
 
     # ----- timers --------------------------------------------------------------
@@ -518,6 +596,7 @@ class DesktopPet(QObject):
         if not self.paused:
             self.session.advance(dt)
         if self.overlay.isVisible():
+            self.overlay.sync_unlock_alert()
             self.overlay.update()
 
     def _poll(self) -> None:

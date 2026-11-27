@@ -33,7 +33,7 @@ def defeat(world, variant, source, count):
 def test_progression_session_starts_with_exactly_the_base_rotation():
     world = session()
     assert world.defenders == world.available_defenders == BASE_DEFENDERS
-    assert world.defender == "goblins" and world.goblins
+    assert world.defender == "dragon" and world.dragons
     assert not world.can_spawn_hero("hero_barbarian")
     assert not world.can_spawn_hero("unknown")
     before = world.defenders
@@ -56,7 +56,7 @@ def test_actual_enemy_deaths_unlock_minotaur_then_mighty_only_after_claiming():
     assert "minotaur" not in world.defenders
     assert world.claim_unlock("monster:minotaur")
     assert world.defenders == (*BASE_DEFENDERS, "minotaur")
-    assert world.defender == "goblins"
+    assert world.defender == "dragon"
     assert not world.claim_unlock("monster:minotaur")
     assert world.defenders.count("minotaur") == 1
     world.set_defenders(("minotaur",))

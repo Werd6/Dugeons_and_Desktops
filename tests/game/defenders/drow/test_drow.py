@@ -58,9 +58,9 @@ def test_the_drow_ride_in_after_the_chimera_two_lizards_on_the_front_window():
         FakeWindowSource([WindowRecord(1, window)]),
         seed=3,
         max_stickmen=0,
+        defenders=DEFENDERS[DEFENDERS.index("drow") :],
     )
-    world.rotate()  # past the chimera
-    assert DEFENDERS[1] == "drow" and world.defender == "drow"
+    assert world.defender == "drow"
     assert DEFENDER_BARS["drow"][0] == "Drow lizard riders"
     assert len(world.lizards) == 2 and all(z.mounted for z in world.lizards)
     assert all(z.support is not None and z.support.start.y == window.top for z in world.lizards)
