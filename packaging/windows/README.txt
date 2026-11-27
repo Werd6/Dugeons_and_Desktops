@@ -1,10 +1,15 @@
-Dungeons & Desktops (Windows)
+Dungeons & Desktops for Windows
 
-1. Unzip this whole folder somewhere permanent (Downloads, Desktop, etc.).
-2. Keep "Dungeons and Desktops.exe" next to the "_internal" folder.
-   Do not move or shortcut only the .exe — Windows needs _internal beside it
-   or you will see "Failed to load Python DLL".
-3. Double-click "Dungeons and Desktops.exe" to run.
-4. If SmartScreen warns, choose More info → Run anyway.
+Recommended: run Dungeons-and-Desktops-Windows-Setup.exe
+  • Installs under your user folder (no admin password)
+  • Adds Start Menu and Desktop shortcuts
+  • Keeps the app files together automatically
 
-Opening the exe again while it is already running just reopens the Command Board.
+After install, open “Dungeons and Desktops” from the Start Menu or Desktop.
+Opening it again while it is already running just reopens the Command Board.
+
+If Windows SmartScreen warns on the installer or the app, choose
+More info → Run anyway (the build is not code-signed yet).
+
+Uninstall anytime from Windows Settings → Apps, or the Start Menu
+“Uninstall Dungeons and Desktops” entry.

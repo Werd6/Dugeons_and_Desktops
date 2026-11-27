@@ -18,7 +18,7 @@ jobs:
           - os: macos-latest
             artifact: Dungeons-and-Desktops-macOS.zip
           - os: windows-latest
-            artifact: Dungeons-and-Desktops-Windows.zip
+            artifact: Dungeons-and-Desktops-Windows-Setup.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -82,13 +82,22 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "Dungeons and Desktops.app" "${{ matrix.artifact }}"
           mv "${{ matrix.artifact }}" ..
 
-      - name: Zip Windows onedir
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item packaging\windows\README.txt "dist\Dungeons and Desktops\README.txt"
-          # Keep a parent folder so the exe stays next to _internal after unzip.
-          Compress-Archive -Path "dist\Dungeons and Desktops" -DestinationPath "${{ matrix.artifact }}"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = "${env:ProgramFiles}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found after Inno Setup install" }
+          & $iscc /DMyAppVersion=0.1.0 packaging\windows\installer.iss
+          if (-not (Test-Path "${{ matrix.artifact }}")) {
+            throw "Installer output missing: ${{ matrix.artifact }}"
+          }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -105,12 +114,12 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect release zips
+      - name: Collect release files
         id: meta
         shell: bash
         run: |
           mkdir -p release
-          cp artifacts/*/*.zip release/ || cp artifacts/*.zip release/
+          find artifacts -type f \( -name '*.zip' -o -name '*.exe' \) -exec cp {} release/ \;
           ls -la release
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -130,16 +139,15 @@ jobs:
           prerelease: ${{ steps.meta.outputs.prerelease }}
           generate_release_notes: ${{ steps.meta.outputs.prerelease == 'false' }}
           body: |
-            Download the zip for your platform, unpack, and run.
+            **macOS:** download the zip, unpack, and open the app (signed + notarized when
+            Apple secrets are configured).
 
-            **macOS:** Developer ID signed + notarized when Apple secrets are configured
-            on the repo. If Gatekeeper still blocks an older unsigned zip, run
-            `xattr -cr "Dungeons and Desktops.app"` after unzipping.
-
-            **Windows (unsigned):** unzip the whole folder and run the `.exe` next to
-            `_internal` (do not move only the exe). If SmartScreen warns, choose
-            More info → Run anyway.
-          files: release/*.zip
+            **Windows:** download `Dungeons-and-Desktops-Windows-Setup.exe`, run it, and
+            use the Desktop / Start Menu shortcut. No unzipping or folder juggling.
+            If SmartScreen warns, choose More info → Run anyway.
+          files: |
+            release/*.zip
+            release/*.exe
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
