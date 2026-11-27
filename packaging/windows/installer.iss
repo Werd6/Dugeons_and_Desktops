@@ -39,7 +39,7 @@ InfoBeforeFile=README.txt
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a Desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: checked
+Name: "desktopicon"; Description: "Create a Desktop shortcut"; GroupDescription: "Shortcuts:"
 
 [Files]
 ; Entire PyInstaller onedir — exe stays next to _internal inside {app}.
